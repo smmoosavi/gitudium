@@ -1,6 +1,6 @@
 # Gitudium
 
-A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates and local API authentication are not implemented yet.
+A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates refresh active history after commits, branch switches, and ref changes. Local API authentication is not implemented yet.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ pnpm install
 pnpm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite serves React and proxies `/api/trpc` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The server captures its launch working directory and discovers that repository lazily. Select a reference (all refs plus HEAD by default), select a commit, then select a changed file to view its diff. **Load more commits** appends 50-commit pages when available; failed queries offer **Retry**. Reload to pick up repository changes until live updates are implemented.
+Open <http://127.0.0.1:5173>. Vite serves React and proxies `/api` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The server captures its launch working directory and discovers that repository lazily. Select a reference (all refs plus HEAD by default), select a commit, then select a changed file to view its diff. **Load more commits** appends 50-commit pages when available; failed queries offer **Retry**. Live updates preserve the selected reference, commit, and file, while restarting history at its first page. The connection indicator reports disconnects; automatic SSE reconnect reconciles missed changes.
 
 Both servers watch their source files. Ctrl+C stops both processes. VS Code also provides development, typecheck, and artifact-build tasks.
 
@@ -40,6 +40,12 @@ bun test tests/repository.test.ts
 pnpm run typecheck
 ```
 
+## Live updates
+
+One `/api/events` SSE stream supplies invalidation events. Resolved Git/common directories are watched with a 100 ms coalescing window; a 2-second bounded fingerprint check covers HEAD, loose/custom refs, packed refs, and reftable metadata even when watchers are unavailable. Polling never launches Git or scans object/log directories. Refreshes are serialized and coalesced; metadata and references refresh before history restarts at its first page. Commit details and file diffs remain cached by immutable commit ID. A removed selected reference stays visible as unavailable rather than silently switching filters.
+
+Reconnect sends an initial invalidation to reconcile missed changes. Disconnects keep the existing view visible with a stale-data warning. Shutdown closes watchers, timers, and streams; Bun's idle timeout is disabled for long-lived SSE connections. Working-tree-only edits are not monitored.
+
 ## Single-file build and invocation
 
 Building requires pnpm, Bun, and the installed project dependencies. `pnpm run build` builds the production frontend into `dist/`, embeds every asset as base64, and bundles the backend and its dependencies into one executable JavaScript file, `gitudium`, at the checkout root. Temporary generated modules are removed automatically. `pnpm run build:client` builds only the frontend.
@@ -52,10 +58,10 @@ Copy only `gitudium` to the destination; no `node_modules`, `dist/`, package ins
 bun ./gitudium
 ```
 
-The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that URL manually. Ctrl+C or SIGTERM shuts down the server. Run it inside the repository to browse (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Live updates and per-launch API authentication remain later work in [the implementation plan](./plan.md).
+The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that URL manually. Ctrl+C or SIGTERM shuts down the server. Run it inside the repository to browse (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Per-launch API authentication remains later work in [the implementation plan](./plan.md).
 
-`pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
+`pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, SSE invalidation following an external commit, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
 
-The validated artifact is approximately **867 KiB (888,119 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun and Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
+The validated artifact is approximately **873 KiB (894,098 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun and Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
 
 The servers bind only to loopback, but launch-token and Host/Origin protection are not yet implemented. Repository content is now exposed through read-only queries. Treat this as a development preview, use only trusted repositories, and do not expose or forward its ports.

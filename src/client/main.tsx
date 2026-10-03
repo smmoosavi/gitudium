@@ -1,4 +1,5 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
+import { createLiveRefresh } from "./live";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { HistoryCursor } from "../repository/types";
@@ -17,9 +18,9 @@ function Failure({ error, retry }: { error: Error; retry: () => void }) {
 
 function CommitView({ id }: { id: string }) {
   const [path, setPath] = useState<string | null>(null);
-  const commit = useQuery({ queryKey: ["commit", id], queryFn: ({ signal }) => api.commit.query({ revision: id }, { signal }), retry: false });
+  const commit = useQuery({ queryKey: ["commit", id], staleTime: Infinity, queryFn: ({ signal }) => api.commit.query({ revision: id }, { signal }), retry: false });
   const diff = useQuery({
-    queryKey: ["diff", id, path], enabled: path !== null,
+    queryKey: ["diff", id, path], enabled: path !== null, staleTime: Infinity,
     queryFn: ({ signal }) => api.diff.query({ revision: id, path: path! }, { signal }), retry: false,
   });
   if (commit.isPending) return <p role="status">Loading commit…</p>;
@@ -48,6 +49,15 @@ function CommitView({ id }: { id: string }) {
 function App() {
   const [revision, setRevision] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
+  useEffect(() => {
+    const refresh = createLiveRefresh(queryClient);
+    const events = new EventSource("/api/events");
+    events.onopen = () => setConnection("connected");
+    events.onerror = () => setConnection("disconnected");
+    events.addEventListener("invalidation", () => { void refresh.refresh(); });
+    return () => { events.close(); refresh.close(); };
+  }, []);
   const metadata = useQuery({ queryKey: ["metadata"], queryFn: ({ signal }) => api.metadata.query(undefined, { signal }), retry: false });
   const references = useQuery({ queryKey: ["references"], enabled: metadata.isSuccess, queryFn: ({ signal }) => api.references.query(undefined, { signal }), retry: false });
   const history = useInfiniteQuery({
@@ -57,7 +67,7 @@ function App() {
   });
   const commits = history.data?.pages.flatMap(page => page.commits) ?? [];
   return <main>
-    <header><h1>Gitudium</h1><p>A local, read-only Git history viewer.</p></header>
+    <header><h1>Gitudium</h1><p>A local, read-only Git history viewer.</p><p role="status">{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Live updates disconnected — reconnecting… Displayed data may be stale."}</p></header>
     {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong>{metadata.data.root ?? metadata.data.gitDirectory}</strong> · {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}{metadata.data.bare && " · Bare repository"}</p>}
     <div className="viewer">
       <section aria-labelledby="history-title">
@@ -65,6 +75,7 @@ function App() {
         <label htmlFor="reference">Reference</label>{" "}
         <select id="reference" value={revision} onChange={event => { setRevision(event.target.value); setSelected(null); }}>
           <option value="">All references + HEAD</option>
+          {revision && references.isSuccess && !references.data.some(ref => ref.name === revision && ref.commitId !== null) && <option value={revision}>{revision} (unavailable)</option>}
           {references.data?.filter(ref => ref.commitId !== null).map(ref => <option key={ref.name} value={ref.name}>{ref.name}</option>)}
         </select>
         {references.isPending && <p role="status">Loading references…</p>}

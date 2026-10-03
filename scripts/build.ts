@@ -35,6 +35,7 @@ const assets = ${JSON.stringify(assets)};
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
+  idleTimeout: 0,
   fetch(request) {
     const pathname = new URL(request.url).pathname;
     return pathname === "/api" || pathname.startsWith("/api/")
@@ -45,6 +46,7 @@ const server = Bun.serve({
 console.log("Gitudium: " + server.url);
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
+    handleRequest.close();
     server.stop(true);
     process.exit(0);
   });

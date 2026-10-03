@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/api/trpc": "http://127.0.0.1:3000",
+      "/api": "http://127.0.0.1:3000",
     },
   },
 });

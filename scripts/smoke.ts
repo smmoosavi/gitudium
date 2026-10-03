@@ -67,6 +67,33 @@ try {
   const diff = await query("diff", { revision: commitId, path: "fixture.txt" });
   assert.equal(diff.state, "text");
   assert.match(diff.patch, /\+Artifact repository fixture/);
+  const eventsAbort = new AbortController();
+  const eventsResponse = await fetch(new URL("/api/events", url), { signal: eventsAbort.signal });
+  assert.equal(eventsResponse.status, 200);
+  assert.match(eventsResponse.headers.get("content-type") ?? "", /text\/event-stream/);
+  const eventsReader = eventsResponse.body!.getReader();
+  let eventsBuffer = "";
+  async function invalidation() {
+    await Promise.race([
+      (async () => {
+        while (!eventsBuffer.includes("event: invalidation")) {
+          const chunk = await eventsReader.read();
+          assert(!chunk.done, "SSE closed before invalidation");
+          eventsBuffer += new TextDecoder().decode(chunk.value);
+        }
+        eventsBuffer = "";
+      })(),
+      Bun.sleep(10_000).then(() => { throw new Error("Live invalidation timed out"); }),
+    ]);
+  }
+  await invalidation();
+  await Bun.write(join(directory, "fixture.txt"), "Artifact live fixture\n");
+  await git("add", "fixture.txt");
+  await git("-c", "user.name=Artifact Fixture", "-c", "user.email=artifact@example.test", "-c", "commit.gpgsign=false", "commit", "-m", "Live fixture");
+  await invalidation();
+  assert.equal((await query("history", { limit: 1 })).commits[0].subject, "Live fixture");
+  eventsAbort.abort();
+  await eventsReader.cancel().catch(() => {});
   assert.equal((await fetch(new URL("/missing", url))).status, 404);
   child.kill("SIGTERM");
   const exit = await Promise.race([
@@ -74,7 +101,7 @@ try {
     Bun.sleep(5_000).then(() => { throw new Error("Artifact shutdown timed out"); }),
   ]);
   assert.equal(exit, 0);
-  console.log(`Artifact smoke passed: isolated startup, ${assets.length} assets, repository API and diff, 404, and SIGTERM shutdown.`);
+  console.log(`Artifact smoke passed: isolated startup, ${assets.length} assets, repository API and diff, live SSE invalidation, 404, and SIGTERM shutdown.`);
 } finally {
   if (child && child.exitCode === null) {
     child.kill("SIGKILL");

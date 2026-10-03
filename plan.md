@@ -158,11 +158,15 @@ The typed read-only API now exposes metadata, references, bounded history, commi
 
 ### 4. Live repository updates
 
-- [ ] Add repository change monitoring with debounce and fingerprint fallback.
-- [ ] Add SSE events and targeted client cache invalidation.
-- [ ] Handle disconnect/reconnect and clean shutdown.
-- [ ] Verify external commits, ref updates, and branch switches refresh active views.
-- [ ] Verify repeated event bursts do not produce unbounded subprocess work.
+- [x] Add repository change monitoring with debounce and fingerprint fallback.
+- [x] Add SSE events and targeted client cache invalidation.
+- [x] Handle disconnect/reconnect and clean shutdown.
+- [x] Verify external commits, ref updates, and branch switches refresh active views.
+- [x] Verify repeated event bursts do not produce unbounded subprocess work.
+
+Implemented a single dedicated `/api/events` SSE transport. A lazy monitor watches resolved Git/common directories with 100 ms burst coalescing and a 2-second fingerprint fallback for HEAD, loose/custom refs, packed refs, and reftable metadata. Checks are serialized and bounded to 16,384 entries and 8 MiB, never invoke Git, and conservatively invalidate on transient failures/limits. SSE queues are bounded; abort/cancel and handler shutdown remove listeners and close resources. Development and packaged servers disable Bun's idle timeout for long-lived SSE streams.
+
+Confirmed refresh behavior: preserve selected reference, commit, and file; sequentially refresh metadata/references, trim cached history to its first page, then refetch active history. Immutable commit details/diffs remain cached. Removed references remain selectable as unavailable. Refresh bursts coalesce into a running pass plus reconciliation; reconnect sends an initial invalidation and disconnects show a stale-data warning. Fourteen targeted tests cover watchers/polling, custom/packed refs, linked worktrees, branch switches, burst bounds, cancellation/reconnect/shutdown, and client cache behavior. TypeScript, build, isolated artifact live SSE smoke, and browser checks for external commits, branch switching, selection preservation, offline missed updates, and stable idle connections pass.
 
 ### 5. Packaging and release readiness
 
@@ -170,7 +174,7 @@ The typed read-only API now exposes metadata, references, bounded history, commi
 - [ ] Add local API access protection and validate unauthenticated/cross-origin rejection.
 - [x] Smoke-test the artifact outside the checkout with no runtime package installation.
 - [x] Verify startup, asset loading, the current health API, and shutdown from the artifact.
-- [ ] Verify repository API calls, diffs, and live refresh from the artifact once implemented.
+- [x] Verify repository API calls, diffs, and live refresh from the artifact once implemented.
 - [x] Record validated Bun/Git versions and platform limitations for the current build.
 - [x] Document single-file installation, invocation, troubleshooting, and artifact size.
 
