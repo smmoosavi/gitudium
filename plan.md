@@ -128,10 +128,12 @@ Development dependencies are allowed in the source project; they are not an inst
 
 ### 1. Project foundation
 
-- [ ] Establish Bun/TypeScript manifests, scripts, and development configuration.
-- [ ] Add React/Vite and minimal server entry points.
-- [ ] Document local development and the Bun/Git prerequisites.
-- [ ] Verify the browser can load the UI and call a typed API locally.
+- [x] Establish Bun/TypeScript manifests, scripts, and development configuration.
+- [x] Add React/Vite and minimal server entry points.
+- [x] Document local development and the Bun/Git prerequisites.
+- [x] Verify the browser can load the UI and call a typed API locally.
+
+Foundation validated on Linux with Bun 1.3.14 and Git 2.43.0: TypeScript checking, three Bun HTTP API tests, the Vite production build, and a browser smoke check including manual query refetch all pass. Development uses Vite on `127.0.0.1:5173` with a same-origin `/api/trpc` proxy to Bun on `127.0.0.1:3000`. Fixed development ports are not the final application's available-port launch behavior. The current API is an input-validated health query only; repository operations and launch-token access protection remain in their planned milestones.
 
 ### 2. Repository adapter
 

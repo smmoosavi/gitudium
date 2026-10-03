@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Gitudium: development",
+      "type": "shell",
+      "command": "bun run dev",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Gitudium: typecheck",
+      "type": "shell",
+      "command": "bun run typecheck",
+      "problemMatcher": ["$tsc"],
+      "group": "build"
+    },
+    {
+      "label": "Gitudium: build frontend",
+      "type": "shell",
+      "command": "bun run build",
+      "problemMatcher": [],
+      "group": "build"
+    }
+  ]
+}
