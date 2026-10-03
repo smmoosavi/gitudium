@@ -137,11 +137,15 @@ Foundation validated on Linux with Bun 1.3.14 and Git 2.43.0: TypeScript checkin
 
 ### 2. Repository adapter
 
-- [ ] Define domain types, reader interface, and normalized errors.
-- [ ] Implement repository discovery, including subdirectories and linked worktrees.
-- [ ] Implement refs, bounded history, commit details, and on-demand diffs.
-- [ ] Add fixture-based tests using disposable repositories.
-- [ ] Verify empty repositories, merge commits, unusual filenames, and failed Git commands.
+- [x] Define domain types, reader interface, and normalized errors.
+- [x] Implement repository discovery, including subdirectories and linked worktrees.
+- [x] Implement refs, bounded history, commit details, and on-demand diffs.
+- [x] Add fixture-based tests using disposable repositories.
+- [x] Verify empty repositories, merge commits, unusual filenames, and failed Git commands.
+
+Implemented in `src/repository/` behind `RepositoryReader`; HTTP/UI integration remains milestone 3. History defaults to all refs plus HEAD in topological order, matching the traversal intent of `git log --oneline --decorate --graph --all`. Results include parent IDs for future graph rendering, not ASCII graph columns. An optional revision selects one reachable history. Cursors pin resolved tip IDs and an offset, so later ref changes do not insert commits into subsequent pages; decoration labels reflect current branch/remote/tag refs. Missing/pruned cursor objects produce normalized errors, not a silently restarted traversal.
+
+Merge details and diffs compare against the first parent (confirmed); root commits compare against the empty tree. Rename detection is deliberately disabled: renames appear as deletion/addition, avoiding heuristic and resource-dependent results. Paths are repository-relative literal paths, including option-like and pathspec-magic filenames. File diffs can report binary or oversized states; a whole-commit diff containing any binary patch reports binary. Pages default to 50 commits and are capped at 200; at most 4 subprocesses run concurrently per reader, history snapshots permit 4,096 tips, ordinary output is capped at 8 MiB, stderr at 64 KiB, and patches at 1 MiB. Oversized ordinary results fail explicitly. Cancellation terminates subprocesses; no shell, pager, external diff, text conversion, replacement objects, or inherited Git environment overrides are used. Disposable fixtures cover ordinary/empty/bare repositories, subdirectories, linked worktrees, detached HEAD, annotated and non-commit tags, custom refs, pinned pagination, merges, unusual paths, binary/oversized patches, invalid inputs, unavailable Git, command failures, and cancellation.
 
 ### 3. Read-only viewer
 
