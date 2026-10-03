@@ -149,10 +149,12 @@ Merge details and diffs compare against the first parent (confirmed); root commi
 
 ### 3. Read-only viewer
 
-- [ ] Implement history pagination, reference selection, and commit selection.
-- [ ] Implement changed-file navigation and file diff rendering.
-- [ ] Add explicit loading, empty, binary, oversized, and failure states.
-- [ ] Verify API contracts and the main browser navigation flow.
+- [x] Implement history pagination, reference selection, and commit selection.
+- [x] Implement changed-file navigation and file diff rendering.
+- [x] Add explicit loading, empty, binary, oversized, and failure states.
+- [x] Verify API contracts and the main browser navigation flow.
+
+The typed read-only API now exposes metadata, references, bounded history, commit details, and diffs through an injected repository reader with lazy discovery from the captured launch directory. Runtime validation and normalized errors are covered by disposable-repository HTTP tests, including empty repositories, literal unusual paths, pagination, binary/oversized patches, invalid inputs, and discovery failures. The UI uses 50-commit pages, reference filtering, explicit commit/file selection, and colored unified diffs. Initial queries are sequenced to avoid saturating the adapter; window-focus refetch is disabled until live-update reconciliation is implemented. Merge/root semantics are shown in commit details. TypeScript, nine HTTP/asset tests, the production build, repository-aware artifact smoke, and browser navigation through reference selection, commit details, and a file diff pass. Live updates and access protection remain deferred; this is a development preview.
 
 ### 4. Live repository updates
 

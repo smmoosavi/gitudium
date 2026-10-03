@@ -1,6 +1,6 @@
 # Gitudium
 
-A local, read-only Git history viewer. The repository adapter is implemented and tested; the UI still verifies connectivity to a typed tRPC API. Repository browsing and repository API routes are not implemented yet.
+A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates and local API authentication are not implemented yet.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ pnpm install
 pnpm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite serves React and proxies `/api/trpc` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The page displays the response from the typed, input-validated health query. Use **Check connection** to refetch it.
+Open <http://127.0.0.1:5173>. Vite serves React and proxies `/api/trpc` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The server captures its launch working directory and discovers that repository lazily. Select a reference (all refs plus HEAD by default), select a commit, then select a changed file to view its diff. **Load more commits** appends 50-commit pages when available; failed queries offer **Retry**. Reload to pick up repository changes until live updates are implemented.
 
 Both servers watch their source files. Ctrl+C stops both processes. VS Code also provides development, typecheck, and artifact-build tasks.
 
@@ -33,7 +33,7 @@ pnpm run test:artifact
 
 History defaults to all refs plus HEAD in topological order, similar to `git log --oneline --decorate --graph --all`, with parent IDs available for graph rendering. Pages pin commit tips across ref changes; labels are refreshed from current refs. An optional revision limits history to that commit and its ancestors. Merge diffs use the first parent; root diffs use the empty tree. Rename detection is off (deletion/addition). Paths are literal repository-relative filenames. Diff results distinguish text, binary, and oversized output.
 
-Limits: 50 commits per page by default (maximum 200), 4 concurrent Git subprocesses per reader, 4,096 history tips, 8 MiB ordinary output, and 1 MiB patches. Normalized errors cover invalid inputs, missing revisions, unavailable Git, failed commands, cancellation, excessive output, and concurrency saturation. No repository operations are exposed over HTTP yet.
+Limits: 50 commits per page by default (maximum 200), 4 concurrent Git subprocesses per reader, 4,096 history tips, 8 MiB ordinary output, and 1 MiB patches. Normalized errors cover invalid inputs, missing revisions, unavailable Git, failed commands, cancellation, excessive output, and concurrency saturation. The typed API exposes only metadata, references, history, commit, and diff queries, with runtime validation and normalized repository errors.
 
 ```sh
 bun test tests/repository.test.ts
@@ -52,10 +52,10 @@ Copy only `gitudium` to the destination; no `node_modules`, `dist/`, package ins
 bun ./gitudium
 ```
 
-The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that URL manually. Ctrl+C or SIGTERM shuts down the server. It currently shows the connectivity UI, not repository history; repository API/UI integration, live updates, and per-launch API authentication remain later work in [the implementation plan](./plan.md).
+The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that URL manually. Ctrl+C or SIGTERM shuts down the server. Run it inside the repository to browse (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Live updates and per-launch API authentication remain later work in [the implementation plan](./plan.md).
 
-`pnpm run test:artifact` checks the existing build from an isolated temporary directory containing only the copied artifact: startup, HTML, JavaScript/CSS loading, the health API, missing routes, and SIGTERM shutdown. Run it after building. Browser execution was also validated against the artifact: the UI rendered, the typed API connected, and **Check connection** successfully refetched.
+`pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
 
-The validated artifact is approximately **850 KiB (870,434 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun, and repository operations will require Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
+The validated artifact is approximately **867 KiB (888,119 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun and Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
 
-The development servers bind only to loopback, but launch-token protection is not yet implemented. Use this foundation only for local development; it exposes no repository data or Git operations.
+The servers bind only to loopback, but launch-token and Host/Origin protection are not yet implemented. Repository content is now exposed through read-only queries. Treat this as a development preview, use only trusted repositories, and do not expose or forward its ports.

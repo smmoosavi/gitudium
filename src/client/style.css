@@ -10,10 +10,28 @@ body {
 }
 
 main {
-  max-width: 48rem;
-  margin: 4rem auto;
+  max-width: 100rem;
+  margin: 2rem auto;
   padding: 0 1.5rem;
 }
+
+.viewer { display: grid; grid-template-columns: minmax(18rem, 2fr) minmax(0, 3fr); gap: 1rem; align-items: start; }
+.viewer > section { min-width: 0; }
+.repository, .object-id, .files code { overflow-wrap: anywhere; }
+select { max-width: 100%; font: inherit; padding: 0.4rem; }
+.commits, .files { list-style: none; padding: 0; }
+.commits button, .files button { width: 100%; text-align: left; background: #f4f6fa; color: #172033; border: 1px solid #d9dfeb; margin-bottom: 0.4rem; }
+.commits button > span { display: block; font-size: 0.85rem; }
+button[aria-pressed="true"] { border-color: #244bc4; background: #e8edff; }
+.labels { color: #244bc4; overflow-wrap: anywhere; }
+.muted { color: #546178; font-size: 0.9rem; }
+.message { white-space: pre-wrap; overflow-wrap: anywhere; }
+.patch { overflow: auto; background: #111827; color: #e5e7eb; padding: 1rem; font-size: 0.85rem; max-height: 38rem; }
+.addition { color: #a7f3d0; }
+.deletion { color: #fecaca; }
+.hunk { color: #93c5fd; }
+button:focus-visible, select:focus-visible { outline: 3px solid #879df0; outline-offset: 2px; }
+@media (max-width: 850px) { .viewer { grid-template-columns: minmax(0, 1fr); } main { padding: 0 0.75rem; } }
 
 section {
   background: white;

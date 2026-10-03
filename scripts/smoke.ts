@@ -6,6 +6,17 @@ import { strict as assert } from "node:assert";
 const directory = await mkdtemp(join(tmpdir(), "gitudium-smoke-"));
 let child: ReturnType<typeof Bun.spawn> | undefined;
 try {
+  const git = async (...args: string[]) => {
+    const process = Bun.spawn(["git", "--no-pager", ...args], { cwd: directory, stdout: "pipe", stderr: "pipe", env: { PATH: globalThis.process.env.PATH, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+    const [output, error, status] = await Promise.all([new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited]);
+    assert.equal(status, 0, error);
+    return output.trim();
+  };
+  await git("init", "-b", "main");
+  await Bun.write(join(directory, "fixture.txt"), "Artifact repository fixture\n");
+  await git("add", "fixture.txt");
+  await git("-c", "user.name=Artifact Fixture", "-c", "user.email=artifact@example.test", "-c", "commit.gpgsign=false", "commit", "-m", "Artifact fixture");
+  const commitId = await git("rev-parse", "HEAD");
   const artifact = join(directory, "gitudium");
   await copyFile(join(import.meta.dir, "..", "gitudium"), artifact);
   child = Bun.spawn([artifact], {
@@ -44,6 +55,18 @@ try {
   const result = await api.json();
   assert.equal(result.result.data.status, "ok");
   assert.match(result.result.data.message, /Artifact/);
+  async function query(name: string, input?: unknown) {
+    const response = await fetch(new URL(`/api/trpc/${name}${input === undefined ? "" : "?input=" + encodeURIComponent(JSON.stringify(input))}`, url));
+    assert.equal(response.status, 200, name);
+    return (await response.json()).result.data;
+  }
+  assert.equal((await query("metadata")).head, commitId);
+  assert.equal((await query("references"))[0].name, "refs/heads/main");
+  assert.equal((await query("history", { limit: 1 })).commits[0].id, commitId);
+  assert.equal((await query("commit", { revision: commitId })).files[0].path, "fixture.txt");
+  const diff = await query("diff", { revision: commitId, path: "fixture.txt" });
+  assert.equal(diff.state, "text");
+  assert.match(diff.patch, /\+Artifact repository fixture/);
   assert.equal((await fetch(new URL("/missing", url))).status, 404);
   child.kill("SIGTERM");
   const exit = await Promise.race([
@@ -51,7 +74,7 @@ try {
     Bun.sleep(5_000).then(() => { throw new Error("Artifact shutdown timed out"); }),
   ]);
   assert.equal(exit, 0);
-  console.log(`Artifact smoke passed: isolated startup, ${assets.length} assets, API, 404, and SIGTERM shutdown.`);
+  console.log(`Artifact smoke passed: isolated startup, ${assets.length} assets, repository API and diff, 404, and SIGTERM shutdown.`);
 } finally {
   if (child && child.exitCode === null) {
     child.kill("SIGKILL");
