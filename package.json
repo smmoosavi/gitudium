@@ -7,7 +7,9 @@
     "dev": "bun scripts/dev.ts",
     "dev:server": "bun --watch src/server/index.ts",
     "dev:client": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "bun scripts/build.ts",
+    "build:client": "vite build",
+    "test:artifact": "bun scripts/smoke.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

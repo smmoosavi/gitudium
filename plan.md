@@ -160,12 +160,15 @@ Foundation validated on Linux with Bun 1.3.14 and Git 2.43.0: TypeScript checkin
 
 ### 5. Packaging and release readiness
 
-- [ ] Embed production frontend assets and produce the single JavaScript artifact.
+- [x] Embed production frontend assets and produce the single JavaScript artifact.
 - [ ] Add local API access protection and validate unauthenticated/cross-origin rejection.
-- [ ] Smoke-test the artifact outside the checkout with no runtime package installation.
-- [ ] Verify startup, asset loading, API calls, diffs, live refresh, and shutdown from the artifact.
-- [ ] Record supported Bun/Git versions and platform limitations.
-- [ ] Document installation, invocation, troubleshooting, and artifact size.
+- [x] Smoke-test the artifact outside the checkout with no runtime package installation.
+- [x] Verify startup, asset loading, the current health API, and shutdown from the artifact.
+- [ ] Verify repository API calls, diffs, and live refresh from the artifact once implemented.
+- [x] Record validated Bun/Git versions and platform limitations for the current build.
+- [x] Document single-file installation, invocation, troubleshooting, and artifact size.
+
+Build-related work was brought forward before repository/viewer milestones. `pnpm run build` emits executable JavaScript `gitudium` with embedded frontend assets and bundled server dependencies; Bun remains the interpreter (not a native executable). `pnpm run test:artifact` validates a copied artifact in an isolated temporary directory. Linux validation used Bun 1.3.14 and Git 2.43.0. Repository features and access protection are deliberately not included in this build-only milestone.
 
 ## Validation strategy
 

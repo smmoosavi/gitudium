@@ -16,7 +16,7 @@
       "group": "build"
     },
     {
-      "label": "Gitudium: build frontend",
+      "label": "Gitudium: build artifact",
       "type": "shell",
       "command": "bun run build",
       "problemMatcher": [],
