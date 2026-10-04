@@ -94,6 +94,15 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .commit-summary > p:not(.muted) { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .message { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 16px 0; }
 .files { padding: 6px 0; }
+.files-heading { flex-wrap: wrap; }
+.files-heading .count { margin-left: auto; }
+.file-tree ul { list-style: none; margin: 0; padding: 0; }
+.file-tree details > ul { padding-left: 16px; }
+.file-tree summary { padding: 6px 12px; cursor: pointer; color: var(--muted); overflow-wrap: anywhere; }
+.file-tree summary:hover { background: #303238; }
+.file-tree summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.file-tree summary svg { vertical-align: middle; margin-right: 6px; }
+.file-tree button { padding-left: 18px; }
 .files button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 0; padding: 6px 18px; }
 .files code { overflow-wrap: anywhere; min-width: 0; font-size: 12px; }
 .file-status { color: #91b7ed; font: 600 11px monospace; flex-shrink: 0; }

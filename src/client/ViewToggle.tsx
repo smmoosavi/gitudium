@@ -1,13 +1,16 @@
 import type { LayoutMode } from "./layout";
 import type { DiffMode } from "./diff";
+import type { FilesMode } from "./files";
 
-type View = LayoutMode | DiffMode;
+type View = LayoutMode | DiffMode | FilesMode;
 const icons: Record<View, string[]> = {
   columns: ["M8 4v16", "M16 4v16"],
   left: ["M8 4v16", "M8 11h12"],
   bottom: ["M4 12h16", "M12 4v8"],
   unified: [],
   split: ["M12 4v16"],
+  tree: ["M8 7v10h3", "M8 12h3", "M13 8h4", "M13 12h4", "M13 17h4"],
+  list: ["M7 8h2m2 0h6", "M7 12h2m2 0h6", "M7 16h2m2 0h6"],
 };
 
 export const layoutOptions: { value: LayoutMode; label: string }[] = [
@@ -18,6 +21,11 @@ export const layoutOptions: { value: LayoutMode; label: string }[] = [
 export const diffOptions: { value: DiffMode; label: string }[] = [
   { value: "split", label: "Side-by-side" },
   { value: "unified", label: "Unified" },
+];
+
+export const filesOptions: { value: FilesMode; label: string }[] = [
+  { value: "tree", label: "Tree view" },
+  { value: "list", label: "List view" },
 ];
 
 export function ViewToggle<T extends View>({ label, value, options, onChange }: {
