@@ -19,9 +19,22 @@ try {
   const commitId = await git("rev-parse", "HEAD");
   const artifact = join(directory, "gitudium");
   await copyFile(join(import.meta.dir, "..", "gitudium"), artifact);
-  child = Bun.spawn([artifact], {
-    cwd: directory,
-    env: { PATH: process.env.PATH },
+  for (const [args, expectedStatus, pattern] of [
+    [["--help"], 0, /Usage: gitudium/],
+    [["--version"], 0, /^\d+\.\d+\.\d+/],
+    [["--port", "invalid"], 1, /Port must be an integer/],
+    [["--unknown"], 1, /usage/],
+    [["--directory", join(directory, "missing")], 1, /usage/],
+    [["--directory", join(directory, "fixture.txt")], 1, /not a directory/],
+  ] as const) {
+    const check = Bun.spawn([artifact, ...args], { cwd: tmpdir(), env: { PATH: process.env.PATH }, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, status] = await Promise.all([new Response(check.stdout).text(), new Response(check.stderr).text(), check.exited]);
+    assert.equal(status, expectedStatus, stdout + stderr);
+    assert.match(stdout + stderr, pattern);
+  }
+  child = Bun.spawn([artifact, "--port", "0", "--directory", directory], {
+    cwd: tmpdir(),
+    env: { PATH: process.env.PATH, GITUDIUM_PORT: "invalid", GITUDIUM_DIRECTORY: join(directory, "missing") },
     stdout: "pipe",
     stderr: "inherit",
   });

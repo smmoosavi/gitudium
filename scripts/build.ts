@@ -29,14 +29,17 @@ try {
 
   const entrypoint = join(temporary, "entry.ts");
   await Bun.write(entrypoint, `
-import { handleRequest } from "../src/server/http";
+import { createRequestHandler } from "../src/server/http";
 import { serveAsset } from "../src/server/assets";
 import { createAccessGuard, protectResponse } from "../src/server/access";
+import { readLaunchOptions } from "../src/server/cli";
+const options = readLaunchOptions();
+const handleRequest = createRequestHandler(options.directory);
 const access = createAccessGuard();
 const assets = ${JSON.stringify(assets)};
 const server = Bun.serve({
   hostname: "127.0.0.1",
-  port: 0,
+  port: options.port,
   idleTimeout: 0,
   async fetch(request, server) {
     const rejected = access.protect(request, server.url.origin);

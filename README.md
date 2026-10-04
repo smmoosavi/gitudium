@@ -80,7 +80,28 @@ Copy only `gitudium` to the destination; no `node_modules`, `dist/`, package ins
 bun ./gitudium
 ```
 
-The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that full URL manually, including its `#token=…` fragment. Ctrl+C or SIGTERM shuts down the server. Run it inside the repository to browse (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Packaging and access protection are validated as recorded in [the implementation plan](./plan.md).
+The artifact serves the UI and API together on `http://127.0.0.1:9171/` by default and prints the browser URL. If the port is occupied, startup fails rather than silently choosing another port. Use `--port` or `GITUDIUM_PORT` to override it; explicitly selecting port `0` requests an automatically assigned port. Open that full URL manually, including its `#token=…` fragment. Ctrl+C or SIGTERM shuts down the server. By default it browses the current directory (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Packaging and access protection are validated as recorded in [the implementation plan](./plan.md).
+
+### Command-line options and environment
+
+```sh
+./gitudium --help
+./gitudium --version
+./gitudium --port 8080 /path/to/repository
+./gitudium -p 8080 -d /path/to/repository
+GITUDIUM_PORT=8080 GITUDIUM_DIRECTORY=/path/to/repository ./gitudium
+```
+
+| Option | Environment | Default |
+| --- | --- | --- |
+| `-h`, `--help` | — | Print usage and exit |
+| `-v`, `--version` | — | Print package version and exit |
+| `-p`, `--port <port>` | `GITUDIUM_PORT` | `9171` |
+| `-d`, `--directory <path>` or positional directory | `GITUDIUM_DIRECTORY` | Current directory |
+
+Command-line values override environment values. Relative paths resolve against the launch working directory. Use either `--directory` or a positional directory, not both; `--` allows positional paths beginning with a dash. Ports must be integers from 0 through 65535. Unknown options, missing values, invalid ports, and nonexistent/non-directory paths exit with status 1; help and version exit with status 0 without starting a server. Binding remains loopback-only; there is no public-host option.
+
+Development accepts the same options via `pnpm run dev --port 3001 /path/to/repository` or `pnpm run dev:server --port 3001 --directory /path/to/repository`. Its backend defaults to port 3000 and requires a nonzero port; the browser remains on port 5173. The combined development launcher automatically configures Vite's API proxy for the chosen backend port. When running `dev:server` and `dev:client` separately, set the same `GITUDIUM_PORT` for both.
 
 `pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, authenticated SSE invalidation following an external commit, unauthenticated/wrong-token/Host/Origin rejection, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
 

@@ -1,9 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { readLaunchOptions } from "../src/server/cli";
 
+const options = readLaunchOptions(true);
+const env = { ...process.env, GITUDIUM_PORT: String(options.port), GITUDIUM_DIRECTORY: options.directory };
 const token = randomBytes(32).toString("hex");
 const children = [
-  Bun.spawn(["bun", "run", "dev:server"], { stdout: "inherit", stderr: "inherit", env: { ...process.env, GITUDIUM_DEV_TOKEN: token } }),
-  Bun.spawn(["bun", "run", "dev:client"], { stdout: "inherit", stderr: "inherit" }),
+  Bun.spawn(["bun", "run", "dev:server"], { stdout: "inherit", stderr: "inherit", env: { ...env, GITUDIUM_DEV_TOKEN: token } }),
+  Bun.spawn(["bun", "run", "dev:client"], { stdout: "inherit", stderr: "inherit", env }),
 ];
 
 let stopping = false;
