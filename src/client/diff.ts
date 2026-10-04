@@ -1,5 +1,12 @@
 export type DiffMode = "unified" | "split";
 export const diffStorageKey = "gitudium.diff-mode.v1";
+export const wrapStorageKey = "gitudium.diff-wrap.v1";
+export function readDiffWrap(storage: Pick<Storage, "getItem">): boolean {
+  try { return storage.getItem(wrapStorageKey) === "true"; } catch { return false; }
+}
+export function writeDiffWrap(storage: Pick<Storage, "setItem">, wrap: boolean) {
+  try { storage.setItem(wrapStorageKey, String(wrap)); } catch { /* Storage can be blocked or full. */ }
+}
 
 export function readDiffMode(storage: Pick<Storage, "getItem">): DiffMode {
   try { return storage.getItem(diffStorageKey) === "split" ? "split" : "unified"; }

@@ -2,7 +2,31 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DiffPatch } from "../src/client/DiffPatch";
-import { diffStorageKey, effectiveDiffMode, readDiffMode, splitPatch, writeDiffMode } from "../src/client/diff";
+import { diffStorageKey, effectiveDiffMode, readDiffMode, splitPatch, writeDiffMode, readDiffWrap, writeDiffWrap, wrapStorageKey } from "../src/client/diff";
+
+test("wrapping defaults off and persists safely", () => {
+  let saved: string | null = null;
+  const storage = { getItem: () => saved, setItem: (key: string, value: string) => { expect(key).toBe(wrapStorageKey); saved = value; } };
+  expect(readDiffWrap(storage)).toBe(false);
+  writeDiffWrap(storage, true); expect(readDiffWrap(storage)).toBe(true);
+  writeDiffWrap(storage, false); expect(readDiffWrap(storage)).toBe(false);
+  expect(readDiffWrap({ getItem: () => "invalid" })).toBe(false);
+  expect(readDiffWrap({ getItem: () => { throw Error(); } })).toBe(false);
+  expect(() => writeDiffWrap({ setItem: () => { throw Error(); } }, true)).not.toThrow();
+});
+
+test("wrapped split rows share grid tracks to retain alignment", () => {
+  const patch = "@@ -1 +1 @@\n-old\n+long new line\n";
+  for (const mode of ["unified", "split"] as const) {
+    const html = renderToStaticMarkup(createElement(DiffPatch, { patch, mode, wrap: true }));
+    expect(html).toContain("wrap-lines");
+    if (mode === "split") {
+      expect(html).toContain("grid-template-rows:auto repeat(2, auto)");
+      expect(html.match(/grid-row:1 \/ span 3/g)?.length).toBe(2);
+    }
+    expect(renderToStaticMarkup(createElement(DiffPatch, { patch, mode }))).not.toContain("wrap-lines");
+  }
+});
 
 test("diff mode persists and tolerates missing or blocked storage", () => {
   let saved: string | null = null;

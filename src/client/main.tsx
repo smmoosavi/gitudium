@@ -12,7 +12,7 @@ import { ChangedFiles } from "./ChangedFiles";
 import { readFilesMode, writeFilesMode, type FilesMode } from "./files";
 import { ResizeHandle } from "./ResizeHandle";
 import { DiffPatch } from "./DiffPatch";
-import { effectiveDiffMode, readDiffMode, writeDiffMode, type DiffMode } from "./diff";
+import { effectiveDiffMode, readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, type DiffMode } from "./diff";
 import "./style.css";
 
 const token = loadAccessToken(window.location, {
@@ -35,7 +35,8 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange }: {
+function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange }: {
+  wrap: boolean; onWrapChange: (wrap: boolean) => void;
   id: string; diffMode: DiffMode; onDiffModeChange: (mode: DiffMode) => void;
   filesMode: FilesMode; onFilesModeChange: (mode: FilesMode) => void;
 }) {
@@ -66,7 +67,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
     <ChangedFiles files={details.files} mode={filesMode} selected={path} onSelect={setPath} />
     </section>
     <section className="diff-panel" aria-label="File diff">
-    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
+    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<button type="button" className="wrap-toggle" aria-label="Wrap diff lines" title="Wrap diff lines" aria-pressed={wrap} onClick={() => onWrapChange(!wrap)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M3 10h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 14h5M3 18h5" /></svg></button><ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
     <div className="diff-content">
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? <p role="status">Loading diff…</p>
@@ -74,13 +75,19 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
       : diff.data.state === "binary" ? <p role="status">Binary file: no text diff is available.</p>
       : diff.data.state === "oversized" ? <p role="status">Diff exceeds the {diff.data.limitBytes.toLocaleString()} byte limit.</p>
       : !diff.data.patch ? <p>No textual changes.</p>
-      : <DiffPatch patch={diff.data.patch} mode={renderedMode} />}
+      : <DiffPatch patch={diff.data.patch} mode={renderedMode} wrap={wrap} />}
     </div>
     </section>
   </>;
 }
 
 function App() {
+  const [wrap, setWrap] = useState(() => {
+    try { return readDiffWrap(window.localStorage); } catch { return false; }
+  });
+  useEffect(() => {
+    try { writeDiffWrap(window.localStorage, wrap); } catch { /* Storage access can be blocked. */ }
+  }, [wrap]);
   const [filesMode, setFilesMode] = useState<FilesMode>(() => {
     try { return readFilesMode(window.localStorage); } catch { return "list"; }
   });
@@ -163,7 +170,7 @@ function App() {
       </section>
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
-      {selected ? <CommitView key={selected} id={selected} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} /> : <>
+      {selected ? <CommitView key={selected} id={selected} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} /> : <>
         <section className="files-panel" aria-label="Commit details and changed files"><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></section>
         <section className="diff-panel" aria-label="File diff"><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></section>
       </>}

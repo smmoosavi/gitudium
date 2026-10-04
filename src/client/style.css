@@ -123,6 +123,13 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .line-number { display: inline-block; width: 6ch; padding-right: 1ch; text-align: right; color: var(--muted); user-select: none; }
 .placeholder { background: #25262a; }
 .no-newline { color: var(--muted); font-style: italic; }
+.patch.wrap-lines code { min-width: 0; }
+.patch.wrap-lines span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.split-patch.wrap-lines .split-side { display: grid; grid-template-rows: subgrid; overflow: visible; }
+.split-patch.wrap-lines .split-side pre, .split-patch.wrap-lines .split-side code { display: contents; }
+.split-patch.wrap-lines .split-line { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.wrap-toggle { display: grid; place-items: center; width: 34px; height: 30px; padding: 0; background: #25262a; color: var(--muted); }
+.wrap-toggle[aria-pressed="true"] { background: #393b40; color: #dfe1e5; box-shadow: inset 0 0 0 1px #6c7078; }
 .diff-content > p, .diff-content > .failure, .empty-hint { margin: 18px; color: var(--muted); }
 .patch { overflow: auto; margin: 0; padding: 14px 0; font-size: 12px; line-height: 1.7; tab-size: 4; }
 .patch code { display: block; min-width: max-content; }
