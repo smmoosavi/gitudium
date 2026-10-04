@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from "@t
 import type { HistoryCursor } from "../repository/types";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "../server/router";
+import { defaultLayout, readLayout, writeLayout, type LayoutMode } from "./layout";
+import { ResizeHandle } from "./ResizeHandle";
 import "./style.css";
 
 const token = loadAccessToken(window.location, {
@@ -35,10 +37,13 @@ function CommitView({ id }: { id: string }) {
     queryKey: ["diff", id, path], enabled: path !== null, staleTime: Infinity,
     queryFn: ({ signal }) => api.diff.query({ revision: id, path: path! }, { signal }), retry: false,
   });
-  if (commit.isPending) return <p role="status">Loading commit…</p>;
-  if (commit.isError) return <Failure error={commit.error} retry={() => void commit.refetch()} />;
+  if (commit.isPending || commit.isError) return <>
+    <section className="files-panel" aria-label="Commit details and changed files">{commit.isPending ? <p className="empty-hint" role="status">Loading commit…</p> : <Failure error={commit.error} retry={() => void commit.refetch()} />}</section>
+    <section className="diff-panel" aria-label="File diff"><p className="empty-hint">Select a changed file to load its diff.</p></section>
+  </>;
   const details = commit.data;
   return <>
+    <section className="files-panel" aria-label="Commit details and changed files">
     <div className="panel-heading"><h2>Commit details</h2><code>{details.shortId}</code></div>
     <div className="commit-summary">
     <h3>{details.subject || "(No subject)"}</h3>
@@ -50,6 +55,8 @@ function CommitView({ id }: { id: string }) {
     <div className="panel-heading"><h3>Changed files</h3><span className="count">{details.files.length}</span></div>
     {!details.files.length && <p className="empty-hint">No changed files.</p>}
     <ul className="files">{details.files.map(file => <li key={file.path}><button aria-pressed={path === file.path} onClick={() => setPath(file.path)}><span className={`file-status ${file.status}`} title={file.status}>{file.status === "type-changed" ? "T" : file.status.charAt(0).toUpperCase()}</span><code>{file.path}</code><span className="file-kind">{file.status}</span></button></li>)}</ul>
+    </section>
+    <section className="diff-panel" aria-label="File diff">
     <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><span className="muted">Unified</span></div>
     <div className="diff-content">
     {path === null ? <p>Select a changed file to load its diff.</p>
@@ -60,14 +67,27 @@ function CommitView({ id }: { id: string }) {
       : !diff.data.patch ? <p>No textual changes.</p>
       : <pre className="patch" aria-label="File diff"><code>{diff.data.patch.split("\n").map((line, index) => <span key={index} className={line.startsWith("+") ? "addition" : line.startsWith("-") ? "deletion" : line.startsWith("@@") ? "hunk" : undefined}>{line || " "}</span>)}</code></pre>}
     </div>
+    </section>
   </>;
 }
 
 function App() {
   const viewerRef = useRef<HTMLDivElement>(null);
-  const [logWidth, setLogWidth] = useState(42);
-  const [resizing, setResizing] = useState(false);
-  const resizeLog = (width: number) => setLogWidth(Math.max(25, Math.min(70, width)));
+  const [layout, setLayout] = useState(() => {
+    try { return readLayout(window.localStorage); } catch { return defaultLayout(); }
+  });
+  useEffect(() => {
+    try { writeLayout(window.localStorage, layout); } catch { /* Storage access can be blocked. */ }
+  }, [layout]);
+  const { mode } = layout;
+  const sizes = layout.sizes[mode];
+  const resize = (axis: "primary" | "secondary", value: number) => setLayout(current => ({
+    ...current, sizes: { ...current.sizes, [current.mode]: { ...current.sizes[current.mode], [axis]: value } },
+  }));
+  const split = (value: number) => `minmax(0, ${value}fr) 6px minmax(0, ${100 - value}fr)`;
+  const columns = mode === "columns"
+    ? `minmax(0, ${sizes.primary}fr) 6px minmax(0, ${(100 - sizes.primary) * sizes.secondary / 100}fr) 6px minmax(0, ${(100 - sizes.primary) * (100 - sizes.secondary) / 100}fr)`
+    : split(sizes.primary);
   const [revision, setRevision] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
@@ -92,11 +112,15 @@ function App() {
       <span className="project-name">{repositoryName ?? "Git workspace"}</span>
       <span className="read-only">Read-only</span>
     </header>
-    <div className="workspace-bar"><span className="workspace-tab">Git</span><span className="workspace-caption">Repository history</span></div>
+    <div className="workspace-bar"><span className="workspace-tab">Git</span><span className="workspace-caption">Repository history</span>
+      <label className="layout-control">Layout <select aria-label="Viewer layout" value={mode} onChange={event => setLayout(current => ({ ...current, mode: event.target.value as LayoutMode }))}>
+        <option value="columns">Three columns</option><option value="left">Log left, files above diff</option><option value="bottom">Log and files above diff</option>
+      </select></label>
+    </div>
     <div className="repository-bar">
     {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong title={repositoryPath}>{repositoryPath}</strong><span className="branch-label">⑂ {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}</span>{metadata.data.bare && <span className="muted">Bare repository</span>}</p>}
     </div>
-    <div ref={viewerRef} className={`viewer${resizing ? " resizing" : ""}`} style={{ gridTemplateColumns: `minmax(240px, ${logWidth}fr) 6px minmax(240px, ${100 - logWidth}fr)` }}>
+    <div ref={viewerRef} className={`viewer layout-${mode}`} style={{ gridTemplateColumns: columns, gridTemplateRows: mode === "columns" ? "minmax(0, 1fr)" : split(sizes.secondary) }}>
       <section className="history-panel" aria-labelledby="history-title">
         <div className="panel-heading"><h2 id="history-title">Log</h2><span className="count">{commits.length} loaded</span></div>
         <div className="history-toolbar"><label htmlFor="reference">⑂ Reference</label>
@@ -118,32 +142,12 @@ function App() {
         </button></li>)}</ol>
         {history.hasNextPage && <button disabled={history.isFetching} onClick={() => void history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading more…" : "Load more commits"}</button>}
       </section>
-      <div className="column-resizer" role="separator" aria-label="Resize commit log" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={70} aria-valuenow={Math.round(logWidth)} aria-controls="history-title" tabIndex={0}
-        onPointerDown={event => {
-          if (event.button !== 0) return;
-          event.preventDefault();
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setResizing(true);
-        }}
-        onPointerMove={event => {
-          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-          const bounds = viewerRef.current?.getBoundingClientRect();
-          if (bounds) resizeLog((event.clientX - bounds.left - 3) / (bounds.width - 6) * 100);
-        }}
-        onPointerUp={event => {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-          setResizing(false);
-        }}
-        onPointerCancel={() => setResizing(false)}
-        onLostPointerCapture={() => setResizing(false)}
-        onDoubleClick={() => resizeLog(42)}
-        onKeyDown={event => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          resizeLog(event.key === "Home" ? 25 : event.key === "End" ? 70 : logWidth + (event.key === "ArrowLeft" ? -2 : 2));
-        }}
-      />
-      <section className="details-panel" aria-label="Commit details">{selected ? <CommitView key={selected} id={selected} /> : <><div className="panel-heading"><h2>Commit details</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></>}</section>
+      <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
+      <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
+      {selected ? <CommitView key={selected} id={selected} /> : <>
+        <section className="files-panel" aria-label="Commit details and changed files"><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></section>
+        <section className="diff-panel" aria-label="File diff"><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></section>
+      </>}
     </div>
     <footer className="status-bar"><span className={`connection ${connection}`} role="status"><span className="status-dot" aria-hidden="true" />{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Disconnected — reconnecting. Displayed data may be stale."}</span><span>Git · Read-only</span></footer>
   </main>;
