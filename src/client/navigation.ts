@@ -14,18 +14,47 @@ export function navigationKey(key: string): string {
 export function navigationAction(pane: FocusedPane, key: string, count: number, selectedIndex: number, fileCount: number): NavigationAction | null {
   key = navigationKey(key);
   if (pane === "diff") {
-    if (key === "PageDown" || key === "PageUp") return { pane, page: key === "PageDown" ? 1 : -1 };
-    if (key === "Home" || key === "End") return { pane, edge: key === "Home" ? "start" : "end" };
+    if (key === "j") return { pane, scroll: 60 };
+    if (key === "k") return { pane, scroll: -60 };
+    if (key === "h") return { pane: "files" };
+    if (key === "l") return null;
+    if (key === "PageDown") return { pane, page: 1 };
+    if (key === "PageUp") return { pane, page: -1 };
+    if (key === "Home") return { pane, edge: "start" };
+    if (key === "End") return { pane, edge: "end" };
   }
-  if (key === "h") return { pane: pane === "diff" ? "files" : "commits" };
-  if (key === "l") {
-    if (!fileCount || pane === "diff") return null;
-    return { pane: pane === "commits" ? "files" : "diff", ...(pane === "commits" && selectedIndex < 0 ? { index: 0 } : {}) };
+  if (pane === "files") {
+    if (key === "j") {
+      if (!count) return null;
+      return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex + 1)) };
+    }
+    if (key === "k") {
+      if (!count) return null;
+      return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex - 1)) };
+    }
+    if (key === "h") return { pane: "commits" };
+    if (key === "l") {
+      if (!fileCount) return null;
+      return { pane: "diff" };
+    }
   }
-  if (key !== "j" && key !== "k") return null;
-  if (pane === "diff") return { pane, scroll: key === "j" ? 60 : -60 };
-  if (!count) return null;
-  return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex + (key === "j" ? 1 : -1))) };
+  if (pane === "commits") {
+    if (key === "j") {
+      if (!count) return null;
+      return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex + 1)) };
+    }
+    if (key === "k") {
+      if (!count) return null;
+      return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex - 1)) };
+    }
+    if (key === "h") return { pane: "commits" };
+    if (key === "l") {
+      if (!fileCount) return null;
+      if (selectedIndex < 0) return { pane: "files", index: 0 };
+      return { pane: "files" };
+    }
+  }
+  return null;
 }
 
 export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number): void {
