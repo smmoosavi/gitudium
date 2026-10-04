@@ -60,6 +60,12 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 
 Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 
+### Keyboard navigation
+
+The selected commit or file has an outline when its pane is focused. Press `j`/`k` to select the next/previous commit. Press `l` to focus changed files (selecting the first file if needed), then use `j`/`k` to select files in display order. Press `l` again to focus the diff, where `j`/`k` scroll down/up. Press `h` to return from the diff to files, or from files to commits.
+
+For commits without changed files, `l` keeps focus on commits. Selection stops at the ends of the loaded list; use **Load more commits** for additional history. Clicking a pane also focuses it. Shortcuts are ignored in text fields, the reference selector, and when modifier keys are held.
+
 ### Customize the view
 
 - **Layout:** use the controls at the top right to choose three columns, a log beside files above the diff, or log and files above a full-width diff.
