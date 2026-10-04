@@ -8,6 +8,8 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "../server/router";
 import { defaultLayout, readLayout, writeLayout, type LayoutMode } from "./layout";
 import { ResizeHandle } from "./ResizeHandle";
+import { DiffPatch } from "./DiffPatch";
+import { effectiveDiffMode, readDiffMode, writeDiffMode, type DiffMode } from "./diff";
 import "./style.css";
 
 const token = loadAccessToken(window.location, {
@@ -30,7 +32,7 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-function CommitView({ id }: { id: string }) {
+function CommitView({ id, diffMode, onDiffModeChange }: { id: string; diffMode: DiffMode; onDiffModeChange: (mode: DiffMode) => void }) {
   const [path, setPath] = useState<string | null>(null);
   const commit = useQuery({ queryKey: ["commit", id], staleTime: Infinity, queryFn: ({ signal }) => api.commit.query({ revision: id }, { signal }), retry: false });
   const diff = useQuery({
@@ -42,6 +44,7 @@ function CommitView({ id }: { id: string }) {
     <section className="diff-panel" aria-label="File diff"><p className="empty-hint">Select a changed file to load its diff.</p></section>
   </>;
   const details = commit.data;
+  const renderedMode = effectiveDiffMode(diffMode, details.files.find(file => file.path === path)?.status);
   return <>
     <section className="files-panel" aria-label="Commit details and changed files">
     <div className="panel-heading"><h2>Commit details</h2><code>{details.shortId}</code></div>
@@ -57,7 +60,7 @@ function CommitView({ id }: { id: string }) {
     <ul className="files">{details.files.map(file => <li key={file.path}><button aria-pressed={path === file.path} onClick={() => setPath(file.path)}><span className={`file-status ${file.status}`} title={file.status}>{file.status === "type-changed" ? "T" : file.status.charAt(0).toUpperCase()}</span><code>{file.path}</code><span className="file-kind">{file.status}</span></button></li>)}</ul>
     </section>
     <section className="diff-panel" aria-label="File diff">
-    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><span className="muted">Unified</span></div>
+    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<select aria-label="Diff view" value={diffMode} onChange={event => onDiffModeChange(event.target.value as DiffMode)}><option value="unified">Unified</option><option value="split">Side-by-side</option></select></div></div>
     <div className="diff-content">
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? <p role="status">Loading diff…</p>
@@ -65,13 +68,19 @@ function CommitView({ id }: { id: string }) {
       : diff.data.state === "binary" ? <p role="status">Binary file: no text diff is available.</p>
       : diff.data.state === "oversized" ? <p role="status">Diff exceeds the {diff.data.limitBytes.toLocaleString()} byte limit.</p>
       : !diff.data.patch ? <p>No textual changes.</p>
-      : <pre className="patch" aria-label="File diff"><code>{diff.data.patch.split("\n").map((line, index) => <span key={index} className={line.startsWith("+") ? "addition" : line.startsWith("-") ? "deletion" : line.startsWith("@@") ? "hunk" : undefined}>{line || " "}</span>)}</code></pre>}
+      : <DiffPatch patch={diff.data.patch} mode={renderedMode} />}
     </div>
     </section>
   </>;
 }
 
 function App() {
+  const [diffMode, setDiffMode] = useState<DiffMode>(() => {
+    try { return readDiffMode(window.localStorage); } catch { return "unified"; }
+  });
+  useEffect(() => {
+    try { writeDiffMode(window.localStorage, diffMode); } catch { /* Storage access can be blocked. */ }
+  }, [diffMode]);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(() => {
     try { return readLayout(window.localStorage); } catch { return defaultLayout(); }
@@ -144,7 +153,7 @@ function App() {
       </section>
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
-      {selected ? <CommitView key={selected} id={selected} /> : <>
+      {selected ? <CommitView key={selected} id={selected} diffMode={diffMode} onDiffModeChange={setDiffMode} /> : <>
         <section className="files-panel" aria-label="Commit details and changed files"><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></section>
         <section className="diff-panel" aria-label="File diff"><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></section>
       </>}

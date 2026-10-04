@@ -96,7 +96,19 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .file-status.deleted { color: #ed9690; }
 .file-kind { margin-left: auto; color: var(--muted); font-size: 11px; }
 .diff-heading h3 { overflow-wrap: anywhere; min-width: 0; }
-.diff-heading > span { flex-shrink: 0; }
+.diff-heading { flex-wrap: wrap; }
+.diff-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.split-patch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: 12px; line-height: 1.7; tab-size: 4; }
+.split-side { min-width: 0; overflow-x: auto; }
+.split-side + .split-side { border-left: 1px solid var(--border); }
+.split-title { padding: 6px 12px; color: var(--muted); background: var(--panel); }
+.split-side pre { margin: 0; padding: 14px 0; }
+.split-side code { display: block; min-width: max-content; }
+.split-line { display: block; min-height: 1.7em; padding-right: 12px; white-space: pre; }
+.split-line.hunk { padding-left: 12px; }
+.line-number { display: inline-block; width: 6ch; padding-right: 1ch; text-align: right; color: var(--muted); user-select: none; }
+.placeholder { background: #25262a; }
+.no-newline { color: var(--muted); font-style: italic; }
 .diff-content > p, .diff-content > .failure, .empty-hint { margin: 18px; color: var(--muted); }
 .patch { overflow: auto; margin: 0; padding: 14px 0; font-size: 12px; line-height: 1.7; tab-size: 4; }
 .patch code { display: block; min-width: max-content; }
