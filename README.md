@@ -2,10 +2,24 @@
 
 A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates refresh active history after commits, branch switches, and ref changes. A per-launch access token and strict local request boundaries protect the API and live stream.
 
+## Installation
+
+This project is not published to npm. Each [GitHub Release](https://github.com/smmoosavi/gitudium/releases/latest) ships a single `gitudium` executable artifact with its runtime dependencies and frontend assets bundled.
+
+Download `gitudium` from the latest release, make it executable, and run it inside the Git repository to browse:
+
+```sh
+chmod +x ./gitudium
+./gitudium
+```
+
+Open the full browser URL printed at startup, including its `#token=…` fragment. The artifact requires Bun and Git; it is executable JavaScript, not a native binary. No npm installation, project checkout, or adjacent assets are needed. Alternatively, run it with `bun ./gitudium`.
+
 ## Prerequisites
 
 - Bun 1.3.14 or newer.
 - Git 2.43.0 or newer (required for repository operations).
+- pnpm 11.17.0 and Node.js 24 for development and building from source.
 
 The foundation is validated on Linux with Bun 1.3.14 and Git 2.43.0. Older versions and other platforms have not been validated.
 
@@ -26,6 +40,12 @@ bun test
 pnpm run build
 pnpm run test:artifact
 ```
+
+## CI and releases
+
+[CI and Release](./.github/workflows/ci-release.yml) runs on pull requests, pushes to `main`, and all tag pushes. It installs dependencies from the frozen pnpm lockfile, checks TypeScript, runs tests, builds the single-file artifact, and smoke-tests it in an isolated repository.
+
+To publish a release, push a tag such as `v0.1.0`. Only after verification succeeds does the workflow create a GitHub Release with generated release notes and the single `gitudium` asset. It does not publish to npm. Downloaded assets may need `chmod +x` before execution.
 
 ## Repository adapter
 
