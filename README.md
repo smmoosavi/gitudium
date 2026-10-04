@@ -2,6 +2,8 @@
 
 A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates refresh active history after commits, branch switches, and ref changes. A per-launch access token and strict local request boundaries protect the API and live stream.
 
+The interface uses a JetBrains-inspired dark workspace with compact log rows, reference badges, a split commit inspector, status-colored changed files, and highlighted unified diffs. The status bar shows live-update connectivity. On narrower screens, the log and inspector stack vertically; keyboard focus and selection remain visible.
+
 ## Installation
 
 This project is not published to npm. Each [GitHub Release](https://github.com/smmoosavi/gitudium/releases/latest) ships a single `gitudium` executable artifact with its runtime dependencies and frontend assets bundled.

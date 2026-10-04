@@ -18,7 +18,14 @@ const api = createTRPCClient<AppRouter>({
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
 
 function Failure({ error, retry }: { error: Error; retry: () => void }) {
-  return <div role="alert"><p>{error.message}</p><button onClick={retry}>Retry</button></div>;
+  return <div className="failure" role="alert"><p>{error.message}</p><button onClick={retry}>Retry</button></div>;
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }).format(date);
 }
 
 function CommitView({ id }: { id: string }) {
@@ -32,22 +39,27 @@ function CommitView({ id }: { id: string }) {
   if (commit.isError) return <Failure error={commit.error} retry={() => void commit.refetch()} />;
   const details = commit.data;
   return <>
-    <h2>{details.subject || "(No subject)"}</h2>
+    <div className="panel-heading"><h2>Commit details</h2><code>{details.shortId}</code></div>
+    <div className="commit-summary">
+    <h3>{details.subject || "(No subject)"}</h3>
     <code className="object-id">{details.id}</code>
-    <p>{details.author.name} &lt;{details.author.email}&gt; · <time dateTime={details.author.date}>{details.author.date}</time></p>
+    <p>{details.author.name} &lt;{details.author.email}&gt; · <time dateTime={details.author.date} title={details.author.date}>{formatDate(details.author.date)}</time></p>
     <pre className="message">{details.message}</pre>
     <p className="muted">{details.parents.length > 1 ? "Merge: changes compared with the first parent." : details.diffBase ? "Changes compared with the parent commit." : "Root commit: changes compared with the empty tree."}</p>
-    <h3>Changed files ({details.files.length})</h3>
-    {!details.files.length && <p>No changed files.</p>}
-    <ul className="files">{details.files.map(file => <li key={file.path}><button aria-pressed={path === file.path} onClick={() => setPath(file.path)}><span className="muted">{file.status}</span> <code>{file.path}</code></button></li>)}</ul>
-    <h3>File diff{path !== null && <> · <code>{path}</code></>}</h3>
+    </div>
+    <div className="panel-heading"><h3>Changed files</h3><span className="count">{details.files.length}</span></div>
+    {!details.files.length && <p className="empty-hint">No changed files.</p>}
+    <ul className="files">{details.files.map(file => <li key={file.path}><button aria-pressed={path === file.path} onClick={() => setPath(file.path)}><span className={`file-status ${file.status}`} title={file.status}>{file.status === "type-changed" ? "T" : file.status.charAt(0).toUpperCase()}</span><code>{file.path}</code><span className="file-kind">{file.status}</span></button></li>)}</ul>
+    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><span className="muted">Unified</span></div>
+    <div className="diff-content">
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? <p role="status">Loading diff…</p>
       : diff.isError ? <Failure error={diff.error} retry={() => void diff.refetch()} />
       : diff.data.state === "binary" ? <p role="status">Binary file: no text diff is available.</p>
       : diff.data.state === "oversized" ? <p role="status">Diff exceeds the {diff.data.limitBytes.toLocaleString()} byte limit.</p>
       : !diff.data.patch ? <p>No textual changes.</p>
-      : <pre className="patch" aria-label="File diff"><code>{diff.data.patch.split("\n").map((line, index) => <span key={index} className={line.startsWith("+") ? "addition" : line.startsWith("-") ? "deletion" : line.startsWith("@@") ? "hunk" : undefined}>{line}{"\n"}</span>)}</code></pre>}
+      : <pre className="patch" aria-label="File diff"><code>{diff.data.patch.split("\n").map((line, index) => <span key={index} className={line.startsWith("+") ? "addition" : line.startsWith("-") ? "deletion" : line.startsWith("@@") ? "hunk" : undefined}>{line || " "}</span>)}</code></pre>}
+    </div>
   </>;
 }
 
@@ -68,18 +80,27 @@ function App() {
     getNextPageParam: page => page.nextCursor ?? undefined, retry: false,
   });
   const commits = history.data?.pages.flatMap(page => page.commits) ?? [];
-  return <main>
-    <header><h1>Gitudium</h1><p>A local, read-only Git history viewer.</p><p role="status">{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Live updates disconnected — reconnecting… Displayed data may be stale."}</p></header>
-    {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong>{metadata.data.root ?? metadata.data.gitDirectory}</strong> · {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}{metadata.data.bare && " · Bare repository"}</p>}
+  const repositoryPath = metadata.data?.root ?? metadata.data?.gitDirectory;
+  const repositoryName = repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1);
+  return <main className="app-shell">
+    <header className="app-header">
+      <div className="brand-mark" aria-hidden="true">G</div><h1>Gitudium</h1><span className="header-divider" />
+      <span className="project-name">{repositoryName ?? "Git workspace"}</span>
+      <span className="read-only">Read-only</span>
+    </header>
+    <div className="workspace-bar"><span className="workspace-tab">Git</span><span className="workspace-caption">Repository history</span></div>
+    <div className="repository-bar">
+    {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong title={repositoryPath}>{repositoryPath}</strong><span className="branch-label">⑂ {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}</span>{metadata.data.bare && <span className="muted">Bare repository</span>}</p>}
+    </div>
     <div className="viewer">
-      <section aria-labelledby="history-title">
-        <h2 id="history-title">History</h2>
-        <label htmlFor="reference">Reference</label>{" "}
+      <section className="history-panel" aria-labelledby="history-title">
+        <div className="panel-heading"><h2 id="history-title">Log</h2><span className="count">{commits.length} loaded</span></div>
+        <div className="history-toolbar"><label htmlFor="reference">⑂ Reference</label>
         <select id="reference" value={revision} onChange={event => { setRevision(event.target.value); setSelected(null); }}>
           <option value="">All references + HEAD</option>
           {revision && references.isSuccess && !references.data.some(ref => ref.name === revision && ref.commitId !== null) && <option value={revision}>{revision} (unavailable)</option>}
           {references.data?.filter(ref => ref.commitId !== null).map(ref => <option key={ref.name} value={ref.name}>{ref.name}</option>)}
-        </select>
+        </select></div>
         {references.isPending && <p role="status">Loading references…</p>}
         {references.isError && <Failure error={references.error} retry={() => void references.refetch()} />}
         <p className="muted">Topological order · 50 commits per page</p>
@@ -88,13 +109,14 @@ function App() {
         {history.isSuccess && commits.length === 0 && <p>No commits in this history.</p>}
         <ol className="commits">{commits.map(commit => <li key={commit.id}><button aria-pressed={selected === commit.id} onClick={() => setSelected(commit.id)}>
           <strong>{commit.subject || "(No subject)"}</strong>
-          <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date}>{commit.author.date}</time></span>
-          {commit.references.length > 0 && <span className="labels">{commit.references.join(" · ")}</span>}
+          <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
+          {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
         </button></li>)}</ol>
         {history.hasNextPage && <button disabled={history.isFetching} onClick={() => void history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading more…" : "Load more commits"}</button>}
       </section>
-      <section aria-label="Commit details">{selected ? <CommitView key={selected} id={selected} /> : <><h2>Commit details</h2><p>Select a commit to inspect its changed files and diffs.</p></>}</section>
+      <section className="details-panel" aria-label="Commit details">{selected ? <CommitView key={selected} id={selected} /> : <><div className="panel-heading"><h2>Commit details</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></>}</section>
     </div>
+    <footer className="status-bar"><span className={`connection ${connection}`} role="status"><span className="status-dot" aria-hidden="true" />{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Disconnected — reconnecting. Displayed data may be stale."}</span><span>Git · Read-only</span></footer>
   </main>;
 }
 
