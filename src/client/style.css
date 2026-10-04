@@ -39,6 +39,11 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .branch-label { color: #b9a4ed; }
 .viewer { display: grid; flex: 1; min-height: 0; }
 .layout-control { margin-left: auto; padding-right: 16px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.view-toggle { display: inline-flex; flex-shrink: 0; border: 1px solid #50535a; border-radius: 4px; overflow: hidden; }
+.view-toggle button { display: grid; place-items: center; width: 46px; height: 28px; padding: 0; border: 0; border-radius: 0; background: #25262a; color: var(--muted); }
+.view-toggle button + button { border-left: 1px solid #50535a; }
+.view-toggle button:hover { background: #393b40; color: #dfe1e5; }
+.view-toggle button[aria-pressed="true"] { background: #393b40; color: #dfe1e5; box-shadow: inset 0 0 0 1px #6c7078; }
 .pane-resizer { background: #25262a; touch-action: none; user-select: none; }
 .pane-resizer[aria-orientation="vertical"] { border-inline: 1px solid var(--border); cursor: col-resize; }
 .pane-resizer[aria-orientation="horizontal"] { border-block: 1px solid var(--border); cursor: row-resize; }
@@ -133,7 +138,7 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
   .workspace-caption { display: none; }
   .workspace-bar { gap: 8px; }
   .layout-control { padding-right: 8px; }
-  .layout-control select { width: 160px; }
+  .view-toggle button { width: 36px; }
   .panel-heading { padding: 8px; gap: 6px; }
   .commit-summary { padding: 10px; }
   .empty-state { min-height: 0; padding: 12px; }

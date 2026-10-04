@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from "@t
 import type { HistoryCursor } from "../repository/types";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "../server/router";
-import { defaultLayout, readLayout, writeLayout, type LayoutMode } from "./layout";
+import { defaultLayout, readLayout, writeLayout } from "./layout";
+import { ViewToggle, layoutOptions, diffOptions } from "./ViewToggle";
 import { ResizeHandle } from "./ResizeHandle";
 import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, readDiffMode, writeDiffMode, type DiffMode } from "./diff";
@@ -60,7 +61,7 @@ function CommitView({ id, diffMode, onDiffModeChange }: { id: string; diffMode: 
     <ul className="files">{details.files.map(file => <li key={file.path}><button aria-pressed={path === file.path} onClick={() => setPath(file.path)}><span className={`file-status ${file.status}`} title={file.status}>{file.status === "type-changed" ? "T" : file.status.charAt(0).toUpperCase()}</span><code>{file.path}</code><span className="file-kind">{file.status}</span></button></li>)}</ul>
     </section>
     <section className="diff-panel" aria-label="File diff">
-    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<select aria-label="Diff view" value={diffMode} onChange={event => onDiffModeChange(event.target.value as DiffMode)}><option value="unified">Unified</option><option value="split">Side-by-side</option></select></div></div>
+    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
     <div className="diff-content">
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? <p role="status">Loading diff…</p>
@@ -122,9 +123,7 @@ function App() {
       <span className="read-only">Read-only</span>
     </header>
     <div className="workspace-bar"><span className="workspace-tab">Git</span><span className="workspace-caption">Repository history</span>
-      <label className="layout-control">Layout <select aria-label="Viewer layout" value={mode} onChange={event => setLayout(current => ({ ...current, mode: event.target.value as LayoutMode }))}>
-        <option value="columns">Three columns</option><option value="left">Log left, files above diff</option><option value="bottom">Log and files above diff</option>
-      </select></label>
+      <div className="layout-control"><span>Layout</span><ViewToggle label="Viewer layout" value={mode} options={layoutOptions} onChange={mode => setLayout(current => ({ ...current, mode }))} /></div>
     </div>
     <div className="repository-bar">
     {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong title={repositoryPath}>{repositoryPath}</strong><span className="branch-label">⑂ {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}</span>{metadata.data.bare && <span className="muted">Bare repository</span>}</p>}
