@@ -37,7 +37,10 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .repository { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; }
 .repository strong { font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
 .branch-label { color: #b9a4ed; }
-.viewer { display: grid; grid-template-columns: minmax(320px, 42%) minmax(0, 1fr); flex: 1; min-height: 0; }
+.viewer { display: grid; flex: 1; min-height: 0; }
+.column-resizer { background: #25262a; border-inline: 1px solid var(--border); cursor: col-resize; touch-action: none; }
+.column-resizer:hover, .column-resizer:focus-visible, .resizing .column-resizer { background: var(--accent); outline: none; }
+.resizing { cursor: col-resize; user-select: none; }
 .viewer > section { min-width: 0; overflow: auto; scrollbar-color: #50535a transparent; }
 .history-panel { border-right: 1px solid var(--border); background: #25262a; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; min-height: 41px; background: var(--panel); border-bottom: 1px solid var(--border); }
@@ -94,7 +97,8 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .failure button { margin-top: 8px; }
 @media (max-width: 850px) {
   .app-shell { height: auto; min-height: 100dvh; }
-  .viewer { grid-template-columns: minmax(0, 1fr); }
+  .viewer { grid-template-columns: minmax(0, 1fr) !important; }
+  .column-resizer { display: none; }
   .history-panel { border-right: 0; border-bottom: 1px solid var(--border); max-height: 55dvh; }
   .details-panel { min-height: 360px; }
   .empty-state { min-height: 320px; }

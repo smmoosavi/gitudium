@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useRef, useState } from "react";
 import { createLiveRefresh } from "./live";
 import { connectEvents, loadAccessToken } from "./access";
 import { createRoot } from "react-dom/client";
@@ -64,6 +64,10 @@ function CommitView({ id }: { id: string }) {
 }
 
 function App() {
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const [logWidth, setLogWidth] = useState(42);
+  const [resizing, setResizing] = useState(false);
+  const resizeLog = (width: number) => setLogWidth(Math.max(25, Math.min(70, width)));
   const [revision, setRevision] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
@@ -92,7 +96,7 @@ function App() {
     <div className="repository-bar">
     {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong title={repositoryPath}>{repositoryPath}</strong><span className="branch-label">⑂ {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}</span>{metadata.data.bare && <span className="muted">Bare repository</span>}</p>}
     </div>
-    <div className="viewer">
+    <div ref={viewerRef} className={`viewer${resizing ? " resizing" : ""}`} style={{ gridTemplateColumns: `minmax(240px, ${logWidth}fr) 6px minmax(240px, ${100 - logWidth}fr)` }}>
       <section className="history-panel" aria-labelledby="history-title">
         <div className="panel-heading"><h2 id="history-title">Log</h2><span className="count">{commits.length} loaded</span></div>
         <div className="history-toolbar"><label htmlFor="reference">⑂ Reference</label>
@@ -114,6 +118,31 @@ function App() {
         </button></li>)}</ol>
         {history.hasNextPage && <button disabled={history.isFetching} onClick={() => void history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading more…" : "Load more commits"}</button>}
       </section>
+      <div className="column-resizer" role="separator" aria-label="Resize commit log" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={70} aria-valuenow={Math.round(logWidth)} aria-controls="history-title" tabIndex={0}
+        onPointerDown={event => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setResizing(true);
+        }}
+        onPointerMove={event => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+          const bounds = viewerRef.current?.getBoundingClientRect();
+          if (bounds) resizeLog((event.clientX - bounds.left - 3) / (bounds.width - 6) * 100);
+        }}
+        onPointerUp={event => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          setResizing(false);
+        }}
+        onPointerCancel={() => setResizing(false)}
+        onLostPointerCapture={() => setResizing(false)}
+        onDoubleClick={() => resizeLog(42)}
+        onKeyDown={event => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          resizeLog(event.key === "Home" ? 25 : event.key === "End" ? 70 : logWidth + (event.key === "ArrowLeft" ? -2 : 2));
+        }}
+      />
       <section className="details-panel" aria-label="Commit details">{selected ? <CommitView key={selected} id={selected} /> : <><div className="panel-heading"><h2>Commit details</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></>}</section>
     </div>
     <footer className="status-bar"><span className={`connection ${connection}`} role="status"><span className="status-dot" aria-hidden="true" />{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Disconnected — reconnecting. Displayed data may be stale."}</span><span>Git · Read-only</span></footer>
