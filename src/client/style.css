@@ -86,7 +86,8 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .commits button code { color: #9eb3e8; }
 .commits button:hover, .files button:hover { background: #303238; }
 .commits button[aria-pressed="true"], .files button[aria-pressed="true"] { background: #2e436e; box-shadow: inset 3px 0 #789cff; }
-.pane-focused .commits button[aria-pressed="true"], .pane-focused .files button[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: -1px; }
+.commits button:focus, .files button:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+.diff-content:focus { outline: none; }
 .commits button .labels { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 .ref-label { color: #b9c5ef; background: #35405c; border: 1px solid #485779; border-radius: 3px; padding: 0 5px; }
 .commit-summary { padding: 18px; }

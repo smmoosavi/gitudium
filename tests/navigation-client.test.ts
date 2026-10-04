@@ -1,5 +1,29 @@
 import { expect, test } from "bun:test";
-import { navigationAction, navigationKey } from "../src/client/navigation";
+import { focusNavigationTarget, navigationAction, navigationKey } from "../src/client/navigation";
+
+test("navigation transfers DOM focus to the destination item or diff", () => {
+  const calls: string[] = [];
+  const target = (name: string) => ({
+    parentElement: null,
+    focus: (options: FocusOptions) => { expect(options.preventScroll).toBe(true); calls.push(name); },
+    scrollIntoView: () => {},
+  });
+  const commit = target("commit");
+  const file = target("file");
+  const diff = target("diff");
+  const viewer = {
+    querySelector: (selector: string) => selector === ".diff-content" ? diff : selector.startsWith(".commits") ? commit : file,
+    querySelectorAll: (selector: string) => selector === ".commits button" ? [target("old commit"), commit] : [target("old file"), file],
+  } as unknown as HTMLElement;
+  focusNavigationTarget(viewer, "commits", 1);
+  focusNavigationTarget(viewer, "files", 1);
+  focusNavigationTarget(viewer, "diff");
+  focusNavigationTarget(viewer, "files");
+  focusNavigationTarget(viewer, "commits");
+  focusNavigationTarget(viewer, "files", 10);
+  focusNavigationTarget(null, "commits");
+  expect(calls).toEqual(["commit", "file", "diff", "file", "commit"]);
+});
 
 test("arrow keys match hjkl navigation in every pane", () => {
   for (const [arrow, key] of [["ArrowDown", "j"], ["ArrowUp", "k"], ["ArrowLeft", "h"], ["ArrowRight", "l"]] as const) {

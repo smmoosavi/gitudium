@@ -28,6 +28,20 @@ export function navigationAction(pane: FocusedPane, key: string, count: number, 
   return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex + (key === "j" ? 1 : -1))) };
 }
 
+export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number): void {
+  if (!viewer) return;
+  const selector = pane === "commits" ? ".commits button" : ".files button";
+  const target = pane === "diff" ? viewer.querySelector<HTMLElement>(".diff-content")
+    : index === undefined ? viewer.querySelector<HTMLElement>(`${selector}[aria-pressed="true"]`)
+    : viewer.querySelectorAll<HTMLElement>(selector)[index];
+  if (!target) return;
+  for (let parent = target.parentElement; parent && parent !== viewer; parent = parent.parentElement) {
+    if (parent instanceof HTMLDetailsElement) parent.open = true;
+  }
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
 export function ignoresNavigation(event: KeyboardEvent): boolean {
   return event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
     || (event.target instanceof HTMLElement && !!event.target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox']"));

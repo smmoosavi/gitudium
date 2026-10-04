@@ -6,7 +6,7 @@ export function ChangedFiles({ files, mode, selected, onSelect }: {
   files: ChangedFile[]; mode: FilesMode; selected: string | null; onSelect: (path: string) => void;
 }) {
   const tree = useMemo(() => buildFileTree(files), [files]);
-  const fileButton = (file: ChangedFile, label: string) => <button aria-pressed={selected === file.path} title={file.path} onClick={() => onSelect(file.path)}>
+  const fileButton = (file: ChangedFile, label: string) => <button aria-pressed={selected === file.path} title={file.path} onFocus={() => onSelect(file.path)} onClick={() => onSelect(file.path)}>
     <span className={`file-status ${file.status}`} title={file.status}>{file.status === "type-changed" ? "T" : file.status.charAt(0).toUpperCase()}</span>
     <code>{label}</code><span className="file-kind">{file.status}</span>
   </button>;

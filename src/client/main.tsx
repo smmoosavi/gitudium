@@ -13,7 +13,7 @@ import { readFilesMode, writeFilesMode, type FilesMode } from "./files";
 import { ResizeHandle } from "./ResizeHandle";
 import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, type DiffMode } from "./diff";
-import { ignoresNavigation, navigationAction, navigationKey, type FocusedPane } from "./navigation";
+import { focusNavigationTarget, ignoresNavigation, navigationAction, navigationKey, type FocusedPane } from "./navigation";
 import { buildFileTree, type FilesNode } from "./files";
 import "./style.css";
 
@@ -69,6 +69,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
         if (action.edge !== undefined) diffContent.scrollTo({ top: action.edge === "start" ? 0 : diffContent.scrollHeight });
       }
       onPaneFocus(action.pane);
+      focusNavigationTarget(filesRef.current?.parentElement ?? null, action.pane, action.index);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -103,7 +104,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
     </section>
     <section className={`diff-panel${focusedPane === "diff" ? " pane-focused" : ""}`} aria-label="File diff" onPointerDown={() => { if (path !== null) onPaneFocus("diff"); }} onFocusCapture={() => { if (path !== null) onPaneFocus("diff"); }}>
     <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<button type="button" className="wrap-toggle" aria-label="Wrap diff lines" title="Wrap diff lines" aria-pressed={wrap} onClick={() => onWrapChange(!wrap)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M3 10h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 14h5M3 18h5" /></svg></button><ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
-    <div ref={diffRef} className="diff-content">
+    <div ref={diffRef} className="diff-content" tabIndex={0} role="region" aria-label="Diff content">
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? <p role="status">Loading diff…</p>
       : diff.isError ? <Failure error={diff.error} retry={() => void diff.refetch()} />
@@ -177,6 +178,7 @@ function App() {
       if (action?.index === undefined) return;
       event.preventDefault();
       setSelected(commits[action.index]!.id);
+      focusNavigationTarget(viewerRef.current, "commits", action.index);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -213,7 +215,7 @@ function App() {
         {history.isPending && <p role="status">Loading history…</p>}
         {history.isError && <Failure error={history.error} retry={() => void (history.isFetchNextPageError ? history.fetchNextPage() : history.refetch())} />}
         {history.isSuccess && commits.length === 0 && <p>No commits in this history.</p>}
-        <ol className="commits">{commits.map(commit => <li key={commit.id}><button aria-pressed={selected === commit.id} onClick={() => setSelected(commit.id)}>
+        <ol className="commits">{commits.map(commit => <li key={commit.id}><button aria-pressed={selected === commit.id} onFocus={() => setSelected(commit.id)} onClick={() => setSelected(commit.id)}>
           <strong>{commit.subject || "(No subject)"}</strong>
           <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
           {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
