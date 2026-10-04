@@ -1,5 +1,6 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createLiveRefresh } from "./live";
+import { connectEvents, loadAccessToken } from "./access";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { HistoryCursor } from "../repository/types";
@@ -7,8 +8,12 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "../server/router";
 import "./style.css";
 
+const token = loadAccessToken(window.location, {
+  getItem: key => window.sessionStorage.getItem(key),
+  setItem: (key, value) => window.sessionStorage.setItem(key, value),
+}, url => window.history.replaceState(null, "", url));
 const api = createTRPCClient<AppRouter>({
-  links: [httpBatchLink({ url: "/api/trpc" })],
+  links: [httpBatchLink({ url: "/api/trpc", headers: () => token ? { Authorization: `Bearer ${token}` } : {} })],
 });
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
 
@@ -52,11 +57,8 @@ function App() {
   const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
   useEffect(() => {
     const refresh = createLiveRefresh(queryClient);
-    const events = new EventSource("/api/events");
-    events.onopen = () => setConnection("connected");
-    events.onerror = () => setConnection("disconnected");
-    events.addEventListener("invalidation", () => { void refresh.refresh(); });
-    return () => { events.close(); refresh.close(); };
+    const close = connectEvents(token!, () => { void refresh.refresh(); }, setConnection);
+    return () => { close(); refresh.close(); };
   }, []);
   const metadata = useQuery({ queryKey: ["metadata"], queryFn: ({ signal }) => api.metadata.query(undefined, { signal }), retry: false });
   const references = useQuery({ queryKey: ["references"], enabled: metadata.isSuccess, queryFn: ({ signal }) => api.references.query(undefined, { signal }), retry: false });
@@ -99,7 +101,7 @@ function App() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      {token ? <App /> : <main><h1>Gitudium</h1><p role="alert">Access token missing or invalid. Open the full URL printed by Gitudium in this tab.</p></main>}
     </QueryClientProvider>
   </StrictMode>,
 );

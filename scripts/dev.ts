@@ -1,7 +1,8 @@
-export {};
+import { randomBytes } from "node:crypto";
 
+const token = randomBytes(32).toString("hex");
 const children = [
-  Bun.spawn(["bun", "run", "dev:server"], { stdout: "inherit", stderr: "inherit" }),
+  Bun.spawn(["bun", "run", "dev:server"], { stdout: "inherit", stderr: "inherit", env: { ...process.env, GITUDIUM_DEV_TOKEN: token } }),
   Bun.spawn(["bun", "run", "dev:client"], { stdout: "inherit", stderr: "inherit" }),
 ];
 

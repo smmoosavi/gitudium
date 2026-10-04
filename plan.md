@@ -95,7 +95,7 @@ Cache commit details by immutable object ID. Invalidate ref-dependent history an
 
 - Bind only to loopback by default.
 - Validate Host and Origin for applicable requests to protect against unrelated websites and DNS rebinding.
-- Generate a per-launch access token and establish authenticated browser access without persisting credentials.
+- Generate a per-launch access token and establish authenticated browser access. Confirmed milestone 5 decision: use a URL fragment, remove it immediately, and store only in tab-scoped `sessionStorage` to allow reloads; no server-side credential persistence. Fresh tabs require the full launch URL, subject to browser duplication/opener session-storage copying behavior.
 - Avoid leaking the token through external requests or logging it beyond the intended launch URL.
 - Expose only read-only, repository-scoped operations.
 
@@ -171,14 +171,16 @@ Confirmed refresh behavior: preserve selected reference, commit, and file; seque
 ### 5. Packaging and release readiness
 
 - [x] Embed production frontend assets and produce the single JavaScript artifact.
-- [ ] Add local API access protection and validate unauthenticated/cross-origin rejection.
+- [x] Add local API access protection and validate unauthenticated/cross-origin rejection.
 - [x] Smoke-test the artifact outside the checkout with no runtime package installation.
 - [x] Verify startup, asset loading, the current health API, and shutdown from the artifact.
 - [x] Verify repository API calls, diffs, and live refresh from the artifact once implemented.
 - [x] Record validated Bun/Git versions and platform limitations for the current build.
 - [x] Document single-file installation, invocation, troubleshooting, and artifact size.
 
-Build-related work was brought forward before repository/viewer milestones. `pnpm run build` emits executable JavaScript `gitudium` with embedded frontend assets and bundled server dependencies; Bun remains the interpreter (not a native executable). `pnpm run test:artifact` validates a copied artifact in an isolated temporary directory. Linux validation used Bun 1.3.14 and Git 2.43.0. Repository features and access protection are deliberately not included in this build-only milestone.
+Build-related work was brought forward before repository/viewer milestones. `pnpm run build` emits executable JavaScript `gitudium` with embedded frontend assets and bundled server dependencies; Bun remains the interpreter (not a native executable). `pnpm run test:artifact` validates a copied artifact in an isolated temporary directory. Linux validation used Bun 1.3.14 and Git 2.43.0. Repository features, live updates, and access protection are now included and validated in the assembled artifact. Each launch generates a 256-bit token carried in the printed URL fragment; the client removes it and stores it in tab-scoped session storage (confirmed user decision). All API routes, including health and SSE, require a Bearer header; SSE uses streaming fetch rather than EventSource to avoid query-string credentials. Exact loopback Host/Origin checks and cross-site fetch rejection run before routing assets/API; responses apply no-referrer and API no-store policies. Development permits only the fixed Vite origin in addition to its API origin and keeps its token stable across watch restarts. Restarting the packaged app rotates the token.
+
+Release validation: all 37 tests pass, TypeScript passes, the single artifact builds to 897,496 bytes, and isolated artifact smoke verifies authenticated repository queries/diffs/live invalidation plus missing/wrong-token and Host/Origin rejection. Browser verification covers fragment removal, reload restoration from session storage, fresh-tab missing-token state, and authenticated live changes preserving selected commit/file. Linux with Bun 1.3.14 and Git 2.43.0 remains the only validated platform/version combination; no broader compatibility claim or native binary distribution is made.
 
 ## Validation strategy
 

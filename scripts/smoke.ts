@@ -33,12 +33,14 @@ try {
         const chunk = await reader.read();
         if (chunk.done) throw new Error("Artifact exited before startup");
         output += new TextDecoder().decode(chunk.value);
-        const match = output.match(/Gitudium: (http:\/\/127\.0\.0\.1:\d+\/)/);
+        const match = output.match(/Gitudium: (http:\/\/127\.0\.0\.1:\d+\/#token=[a-f0-9]{64})/);
         if (match) return match[1]!;
       }
     })(),
     Bun.sleep(10_000).then(() => { throw new Error("Artifact startup timed out"); }),
   ]);
+  const token = new URLSearchParams(new URL(url).hash.slice(1)).get("token")!;
+  const authorization = { Authorization: `Bearer ${token}` };
   const index = await fetch(url);
   assert.equal(index.status, 200);
   assert.match(index.headers.get("content-type") ?? "", /text\/html/);
@@ -50,13 +52,20 @@ try {
     assert.equal(response.status, 200, asset);
     assert((await response.arrayBuffer()).byteLength > 0, asset);
   }
-  const api = await fetch(new URL('/api/trpc/health?input=' + encodeURIComponent(JSON.stringify({ name: "Artifact" })), url));
+  for (const route of ["/api/trpc/metadata", "/api/trpc/health", "/api/events"]) {
+    assert.equal((await fetch(new URL(route, url))).status, 401);
+    assert.equal((await fetch(new URL(route, url), { headers: { Authorization: "Bearer wrong" } })).status, 401);
+    assert.equal((await fetch(new URL(route, url), { headers: { ...authorization, Origin: "https://unrelated.example" } })).status, 403);
+    assert.equal((await fetch(new URL(route, url), { headers: { ...authorization, Host: "rebound.example" } })).status, 403);
+  }
+  assert.equal(index.headers.get("referrer-policy"), "no-referrer");
+  const api = await fetch(new URL('/api/trpc/health?input=' + encodeURIComponent(JSON.stringify({ name: "Artifact" })), url), { headers: authorization });
   assert.equal(api.status, 200);
   const result = await api.json();
   assert.equal(result.result.data.status, "ok");
   assert.match(result.result.data.message, /Artifact/);
   async function query(name: string, input?: unknown) {
-    const response = await fetch(new URL(`/api/trpc/${name}${input === undefined ? "" : "?input=" + encodeURIComponent(JSON.stringify(input))}`, url));
+    const response = await fetch(new URL(`/api/trpc/${name}${input === undefined ? "" : "?input=" + encodeURIComponent(JSON.stringify(input))}`, url), { headers: authorization });
     assert.equal(response.status, 200, name);
     return (await response.json()).result.data;
   }
@@ -68,7 +77,7 @@ try {
   assert.equal(diff.state, "text");
   assert.match(diff.patch, /\+Artifact repository fixture/);
   const eventsAbort = new AbortController();
-  const eventsResponse = await fetch(new URL("/api/events", url), { signal: eventsAbort.signal });
+  const eventsResponse = await fetch(new URL("/api/events", url), { signal: eventsAbort.signal, headers: authorization });
   assert.equal(eventsResponse.status, 200);
   assert.match(eventsResponse.headers.get("content-type") ?? "", /text\/event-stream/);
   const eventsReader = eventsResponse.body!.getReader();

@@ -1,6 +1,6 @@
 # Gitudium
 
-A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates refresh active history after commits, branch switches, and ref changes. Local API authentication is not implemented yet.
+A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates refresh active history after commits, branch switches, and ref changes. A per-launch access token and strict local request boundaries protect the API and live stream.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ pnpm install
 pnpm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite serves React and proxies `/api` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The server captures its launch working directory and discovers that repository lazily. Select a reference (all refs plus HEAD by default), select a commit, then select a changed file to view its diff. **Load more commits** appends 50-commit pages when available; failed queries offer **Retry**. Live updates preserve the selected reference, commit, and file, while restarting history at its first page. The connection indicator reports disconnects; automatic SSE reconnect reconciles missed changes.
+Open the full `http://127.0.0.1:5173/#token=…` URL printed by the development server. Vite serves React and proxies `/api` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The server captures its launch working directory and discovers that repository lazily. Select a reference (all refs plus HEAD by default), select a commit, then select a changed file to view its diff. **Load more commits** appends 50-commit pages when available; failed queries offer **Retry**. Live updates preserve the selected reference, commit, and file, while restarting history at its first page. The connection indicator reports disconnects; automatic SSE reconnect reconciles missed changes.
 
 Both servers watch their source files. Ctrl+C stops both processes. VS Code also provides development, typecheck, and artifact-build tasks.
 
@@ -58,10 +58,16 @@ Copy only `gitudium` to the destination; no `node_modules`, `dist/`, package ins
 bun ./gitudium
 ```
 
-The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that URL manually. Ctrl+C or SIGTERM shuts down the server. Run it inside the repository to browse (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Per-launch API authentication remains later work in [the implementation plan](./plan.md).
+The artifact serves the UI and API together on `127.0.0.1` with an automatically assigned port and prints the browser URL. Open that full URL manually, including its `#token=…` fragment. Ctrl+C or SIGTERM shuts down the server. Run it inside the repository to browse (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Packaging and access protection are validated as recorded in [the implementation plan](./plan.md).
 
-`pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, SSE invalidation following an external commit, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
+`pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, authenticated SSE invalidation following an external commit, unauthenticated/wrong-token/Host/Origin rejection, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
 
-The validated artifact is approximately **873 KiB (894,098 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun and Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
+The validated artifact is approximately **876 KiB (897,496 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun and Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
 
-The servers bind only to loopback, but launch-token and Host/Origin protection are not yet implemented. Repository content is now exposed through read-only queries. Treat this as a development preview, use only trusted repositories, and do not expose or forward its ports.
+## Local access protection
+
+Each launch generates a random 256-bit token. The printed URL carries it in a fragment (not sent to the server); the UI removes the fragment immediately and stores the token in tab-scoped `sessionStorage` so reloads work. A fresh tab needs the full launch URL. Browsers may copy session storage when duplicating a tab or opening one with an opener; this is browser behavior, not strong isolation between tabs. If storage is blocked, access works in memory until reload. Server restart rotates the token; reopen the new printed URL if authentication fails.
+
+All API requests, including health and SSE, require a Bearer header. SSE uses streaming fetch so the token never appears in request URLs. Servers reject unexpected Host, Origin, and cross-site fetch metadata before routing; packaged requests must use the exact printed loopback origin. Development additionally permits the fixed Vite origin, and the launcher keeps the token stable across backend watch restarts. API responses disable caching and responses use a no-referrer policy. Tokens are not written to disk by the application; session storage is the explicitly chosen browser-side exception to otherwise nonpersistent application data.
+
+Keep the launch URL private. Access protection does not isolate repository contents from other processes, browser extensions, or users with access to the same local machine/browser. Use trusted repositories and do not expose or forward its ports.

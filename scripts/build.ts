@@ -31,19 +31,24 @@ try {
   await Bun.write(entrypoint, `
 import { handleRequest } from "../src/server/http";
 import { serveAsset } from "../src/server/assets";
+import { createAccessGuard, protectResponse } from "../src/server/access";
+const access = createAccessGuard();
 const assets = ${JSON.stringify(assets)};
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   idleTimeout: 0,
-  fetch(request) {
+  async fetch(request, server) {
+    const rejected = access.protect(request, server.url.origin);
+    if (rejected) return protectResponse(rejected, request);
     const pathname = new URL(request.url).pathname;
-    return pathname === "/api" || pathname.startsWith("/api/")
-      ? handleRequest(request)
+    const response = pathname === "/api" || pathname.startsWith("/api/")
+      ? await handleRequest(request)
       : serveAsset(request, assets);
+    return protectResponse(response, request);
   },
 });
-console.log("Gitudium: " + server.url);
+console.log("Gitudium: " + server.url + "#token=" + access.token);
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     handleRequest.close();
