@@ -41,6 +41,18 @@ test("empty commits cannot move focus to files", () => {
   expect(navigationAction("commits", "k", 3, 1, 0)).toEqual({ pane: "commits", index: 0 });
 });
 
+test("diff supports page scrolling and jumping to the start or end", () => {
+  expect(navigationAction("diff", "PageDown", 2, 0, 2)).toEqual({ pane: "diff", page: 1 });
+  expect(navigationAction("diff", "PageUp", 2, 0, 2)).toEqual({ pane: "diff", page: -1 });
+  expect(navigationAction("diff", "Home", 2, 0, 2)).toEqual({ pane: "diff", edge: "start" });
+  expect(navigationAction("diff", "End", 2, 0, 2)).toEqual({ pane: "diff", edge: "end" });
+  for (const pane of ["commits", "files"] as const) {
+    for (const key of ["PageDown", "PageUp", "Home", "End"]) {
+      expect(navigationAction(pane, key, 2, 0, 2)).toBeNull();
+    }
+  }
+});
+
 test("diff navigation scrolls instead of selecting items", () => {
   expect(navigationAction("diff", "j", 2, 0, 2)).toEqual({ pane: "diff", scroll: 60 });
   expect(navigationAction("diff", "k", 2, 0, 2)).toEqual({ pane: "diff", scroll: -60 });

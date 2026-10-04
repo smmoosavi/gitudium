@@ -1,5 +1,5 @@
 export type FocusedPane = "commits" | "files" | "diff";
-export type NavigationAction = { pane: FocusedPane; index?: number; scroll?: number };
+export type NavigationAction = { pane: FocusedPane; index?: number; scroll?: number; page?: number; edge?: "start" | "end" };
 
 export function navigationKey(key: string): string {
   switch (key) {
@@ -13,6 +13,10 @@ export function navigationKey(key: string): string {
 
 export function navigationAction(pane: FocusedPane, key: string, count: number, selectedIndex: number, fileCount: number): NavigationAction | null {
   key = navigationKey(key);
+  if (pane === "diff") {
+    if (key === "PageDown" || key === "PageUp") return { pane, page: key === "PageDown" ? 1 : -1 };
+    if (key === "Home" || key === "End") return { pane, edge: key === "Home" ? "start" : "end" };
+  }
   if (key === "h") return { pane: pane === "diff" ? "files" : "commits" };
   if (key === "l") {
     if (!fileCount || pane === "diff") return null;

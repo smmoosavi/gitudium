@@ -62,7 +62,12 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
       event.preventDefault();
       if (action.index !== undefined) setPath(paths[action.index]!);
       if (action.pane === "diff" && path === null && paths.length) setPath(paths[0]!);
-      if (action.scroll !== undefined) diffRef.current?.scrollBy({ top: action.scroll });
+      const diffContent = diffRef.current;
+      if (diffContent) {
+        if (action.scroll !== undefined) diffContent.scrollBy({ top: action.scroll });
+        if (action.page !== undefined) diffContent.scrollBy({ top: action.page * diffContent.clientHeight });
+        if (action.edge !== undefined) diffContent.scrollTo({ top: action.edge === "start" ? 0 : diffContent.scrollHeight });
+      }
       onPaneFocus(action.pane);
     };
     window.addEventListener("keydown", handleKey);

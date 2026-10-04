@@ -64,6 +64,8 @@ Empty and bare repositories are supported. Failed requests provide a **Retry** b
 
 The selected commit or file has an outline when its pane is focused. Press `j`/`k` to select the next/previous commit. Press `l` to focus changed files (selecting the first file if needed), then use `j`/`k` to select files in display order. Press `l` again to focus the diff, where `j`/`k` scroll down/up. Press `h` to return from the diff to files, or from files to commits.
 
+In the focused diff, **Page Up/Page Down** scroll by one visible page, and **Home/End** jump to the start/end of the diff.
+
 Arrow keys work the same way: **Down/Up** select items or scroll the diff, and **Right/Left** move focus forward/back between panes. Focused view toggles and dividers retain their own arrow-key controls.
 
 For commits without changed files, `l` or **Right** keeps focus on commits. Selection stops at the ends of the loaded list; use **Load more commits** for additional history. Clicking a pane also focuses it. Shortcuts are ignored in text fields, the reference selector, and when modifier keys are held.
