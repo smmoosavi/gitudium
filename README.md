@@ -1,116 +1,153 @@
 # Gitudium
 
-A local, read-only Git history viewer with paginated history, reference selection, commit details, changed-file navigation, and on-demand text diffs. Binary, oversized, empty, loading, and failure states are explicit. Live repository updates refresh active history after commits, branch switches, and ref changes. A per-launch access token and strict local request boundaries protect the API and live stream.
+**Browse local Git history in a read-only browser workspace.**
 
-The interface uses a JetBrains-inspired dark workspace with compact log rows, reference badges, status-colored changed files, and highlighted unified diffs. The status bar shows live-update connectivity. Use the **Layout** icon toggle group (hover for descriptions) to choose three columns (log, files, diff), a log on the left with files above the diff, or log and files above a full-width diff. Each pane scrolls independently. Drag either divider to resize panes, or focus it and use Left/Right for vertical dividers and Up/Down for horizontal dividers (Home/End jump to the limits). Double-click a divider to restore its default size. The selected layout and each layout’s pane sizes persist in browser localStorage; blocked storage falls back to in-memory preferences. Switching layouts preserves the selected commit and file. Narrow screens retain the selected layout. Use the **Diff view** icon toggle group in the file-diff heading to choose unified or side-by-side rendering; both toggle groups support Tab, Enter/Space, Left/Right, and Home/End keyboard navigation; this preference also persists in localStorage. Side-by-side aligns old/new lines with line numbers and independently scrollable horizontal panes. Added and deleted files always use the full-width unified view, without changing the saved preference. The **Wrap diff lines** icon button immediately left of the diff-view toggles enables line wrapping in both modes; wrapping defaults off and persists in localStorage. Wrapped side-by-side rows stay aligned even when one side spans more lines. Binary and oversized diffs retain their existing status messages. The **Changed files view** icon toggle switches between a flat list of full paths (the default) and a folder tree with collapsible directories. Both views preserve file selection and status indicators; the view preference persists in localStorage across commits and reloads.
+Gitudium lets you explore commits, filter history by reference, and inspect file changes without leaving your machine. It does not modify your repository.
 
-## Installation
+![Gitudium showing a commit log, a changed-file tree, and a side-by-side diff](docs/images/gitudium.png)
 
-This project is not published to npm. Each [GitHub Release](https://github.com/smmoosavi/gitudium/releases/latest) ships a single `gitudium` executable artifact with its runtime dependencies and frontend assets bundled.
+## Features
 
-Download `gitudium` from the latest release, make it executable, and run it inside the Git repository to browse:
+- **Explore history:** browse commits with branch and tag labels, filter by reference, and load more history as needed.
+- **Inspect commits:** read commit messages, author information, and changed files.
+- **Compare changes:** switch between unified and side-by-side text diffs, with line numbers and optional line wrapping.
+- **Navigate files:** choose a flat list or a collapsible folder tree.
+- **Arrange your workspace:** choose from three layouts and resize independently scrolling panes. Layout, pane sizes, and view preferences are remembered in your browser.
+- **Stay up to date:** commits, branch switches, and reference changes refresh the view automatically.
+
+## Install and launch
+
+### Requirements
+
+- [Bun](https://bun.sh/) **1.3.14 or newer**, available on your `PATH`.
+- [Git](https://git-scm.com/) **2.43.0 or newer**.
+
+Gitudium has been validated on Linux. Other platforms and older runtime versions have not been validated.
+
+### Download
+
+Download the `gitudium` asset from the [latest GitHub release](https://github.com/smmoosavi/gitudium/releases/latest).
+
+Make it executable, then launch it with the path to the repository you want to browse:
 
 ```sh
 chmod +x ./gitudium
-./gitudium
+./gitudium /path/to/repository
 ```
 
-Open the full browser URL printed at startup, including its `#token=…` fragment. The artifact requires Bun and Git; it is executable JavaScript, not a native binary. No npm installation, project checkout, or adjacent assets are needed. Alternatively, run it with `bun ./gitudium`.
+If you launch it from inside a repository, the directory argument is optional. Repository subdirectories and linked worktrees are also supported.
 
-## Prerequisites
+The download is a **single executable JavaScript file, not a native binary**. It bundles the application and frontend assets, but still requires Bun and Git. There is no npm package to install, and you do not need a project checkout or adjacent files.
 
-- Bun 1.3.14 or newer.
-- Git 2.43.0 or newer (required for repository operations).
-- pnpm 11.17.0 and Node.js 24 for development and building from source.
-
-The foundation is validated on Linux with Bun 1.3.14 and Git 2.43.0. Older versions and other platforms have not been validated.
-
-## Local development
+Alternatively, invoke it directly with Bun:
 
 ```sh
-pnpm install
-pnpm run dev
+bun ./gitudium /path/to/repository
 ```
 
-Open the full `http://127.0.0.1:5173/#token=…` URL printed by the development server. Vite serves React and proxies `/api` to the Bun server on `127.0.0.1:3000`, keeping browser requests same-origin. Both ports must be available. The server captures its launch working directory and discovers that repository lazily. Select a reference (all refs plus HEAD by default), select a commit, then select a changed file to view its diff. **Load more commits** appends 50-commit pages when available; failed queries offer **Retry**. Live updates preserve the selected reference, commit, and file, while restarting history at its first page. The connection indicator reports disconnects; automatic SSE reconnect reconciles missed changes.
+### Open the viewer
 
-Both servers watch their source files. Ctrl+C stops both processes. VS Code also provides development, typecheck, and artifact-build tasks.
+Open the **full URL printed in the terminal**, including its `#token=…` fragment. By default, Gitudium serves the viewer at `http://127.0.0.1:9171/`.
 
-```sh
-pnpm run typecheck
-bun test
-pnpm run build
-pnpm run test:artifact
-```
+Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 
-## CI and releases
+## Browse a repository
 
-[CI and Release](./.github/workflows/ci-release.yml) runs on pull requests, pushes to `main`, and all tag pushes. It installs dependencies from the frozen pnpm lockfile, checks TypeScript, runs tests, builds the single-file artifact, and smoke-tests it in an isolated repository.
+1. Choose a **Reference** in the log pane. **All references + HEAD** is selected by default.
+2. Select a commit to see its details and changed files.
+3. Select a changed file to view its diff.
+4. Use **Load more commits** to append another page of history. Pages contain 50 commits, in topological order.
 
-To publish a release, push a tag such as `v0.1.0`. Only after verification succeeds does the workflow create a GitHub Release with generated release notes and the single `gitudium` asset. It does not publish to npm. Downloaded assets may need `chmod +x` before execution.
+Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 
-## Repository adapter
+### Customize the view
 
-[`GitRepositoryReader`](./src/repository/git.ts) implements the serializable [`RepositoryReader`](./src/repository/types.ts) contract. Discover from a launch directory, including subdirectories and linked worktrees, then request metadata, references, history, commit details, or diffs. Empty and bare repositories are supported.
+- **Layout:** use the controls at the top right to choose three columns, a log beside files above the diff, or log and files above a full-width diff.
+- **Pane sizes:** drag a divider to resize panes. Double-click it to restore the default size.
+- **Changed files view:** switch between a flat list and a folder tree using the controls beside the changed-file count.
+- **Diff view:** switch between unified and side-by-side comparisons using the controls in the diff heading.
+- **Wrap diff lines:** use the button beside the diff-view controls to wrap long lines instead of scrolling horizontally.
 
-History defaults to all refs plus HEAD in topological order, similar to `git log --oneline --decorate --graph --all`, with parent IDs available for graph rendering. Pages pin commit tips across ref changes; labels are refreshed from current refs. An optional revision limits history to that commit and its ancestors. Merge diffs use the first parent; root diffs use the empty tree. Rename detection is off (deletion/addition). Paths are literal repository-relative filenames. Diff results distinguish text, binary, and oversized output.
+Changing the layout or file view keeps your current commit and file selected. Preferences persist across reloads when browser storage is available.
 
-Limits: 50 commits per page by default (maximum 200), 4 concurrent Git subprocesses per reader, 4,096 history tips, 8 MiB ordinary output, and 1 MiB patches. Normalized errors cover invalid inputs, missing revisions, unavailable Git, failed commands, cancellation, excessive output, and concurrency saturation. The typed API exposes only metadata, references, history, commit, and diff queries, with runtime validation and normalized repository errors.
+The view toggles support **Tab**, **Enter/Space**, **Left/Right**, and **Home/End**. Focus a divider and use **Left/Right** for vertical dividers or **Up/Down** for horizontal dividers; **Home/End** move to the size limits.
 
-```sh
-bun test tests/repository.test.ts
-pnpm run typecheck
-```
+### How changes are displayed
 
-## Live updates
+- Regular commits are compared with their parent; merge commits are compared with their **first parent**.
+- A repository's first commit is compared with an empty tree.
+- Added and deleted files always use unified diffs, without changing your saved diff preference.
+- Renames appear as a deletion and an addition.
+- Binary files show a status message rather than a text diff. Patches larger than **1 MiB** are not displayed.
 
-One `/api/events` SSE stream supplies invalidation events. Resolved Git/common directories are watched with a 100 ms coalescing window; a 2-second bounded fingerprint check covers HEAD, loose/custom refs, packed refs, and reftable metadata even when watchers are unavailable. Polling never launches Git or scans object/log directories. Refreshes are serialized and coalesced; metadata and references refresh before history restarts at its first page. Commit details and file diffs remain cached by immutable commit ID. A removed selected reference stays visible as unavailable rather than silently switching filters.
+### Live updates
 
-Reconnect sends an initial invalidation to reconcile missed changes. Disconnects keep the existing view visible with a stale-data warning. Shutdown closes watchers, timers, and streams; Bun's idle timeout is disabled for long-lived SSE connections. Working-tree-only edits are not monitored.
+Gitudium refreshes history when another tool creates commits, switches branches, or changes references. Your selected reference, commit, and file are preserved while history reloads from its first page.
 
-## Single-file build and invocation
+The status bar shows the live-update connection. If it disconnects, the current view stays visible with a stale-data warning; reconnecting automatically refreshes it. A deleted selected reference is shown as unavailable rather than silently replaced.
 
-Building requires pnpm, Bun, and the installed project dependencies. `pnpm run build` builds the production frontend into `dist/`, embeds every asset as base64, and bundles the backend and its dependencies into one executable JavaScript file, `gitudium`, at the checkout root. Temporary generated modules are removed automatically. `pnpm run build:client` builds only the frontend.
+**Uncommitted working-tree edits are not monitored or displayed.** Gitudium is a history viewer, not a staging, editing, or merge tool.
 
-Copy only `gitudium` to the destination; no `node_modules`, `dist/`, package installation, or checkout is needed at runtime. Bun must be available on `PATH` for the executable's shebang:
-
-```sh
-./gitudium
-# Alternatively (including platforms without Unix shebang support):
-bun ./gitudium
-```
-
-The artifact serves the UI and API together on `http://127.0.0.1:9171/` by default and prints the browser URL. If the port is occupied, startup fails rather than silently choosing another port. Use `--port` or `GITUDIUM_PORT` to override it; explicitly selecting port `0` requests an automatically assigned port. Open that full URL manually, including its `#token=…` fragment. Ctrl+C or SIGTERM shuts down the server. By default it browses the current directory (subdirectories and linked worktrees are supported). Outside a repository, the UI reports a clear error. Packaging and access protection are validated as recorded in [the implementation plan](./plan.md).
-
-### Command-line options and environment
+## Command-line options
 
 ```sh
 ./gitudium --help
 ./gitudium --version
 ./gitudium --port 8080 /path/to/repository
 ./gitudium -p 8080 -d /path/to/repository
+```
+
+| Option | Purpose | Default |
+| --- | --- | --- |
+| `-h`, `--help` | Show usage and exit | — |
+| `-v`, `--version` | Show version and exit | — |
+| `-p`, `--port <port>` | Choose the local server port | `9171` |
+| `-d`, `--directory <path>` | Choose the repository directory | Current directory |
+| `[directory]` | Positional alternative to `--directory` | Current directory |
+
+You can also set `GITUDIUM_PORT` and `GITUDIUM_DIRECTORY`:
+
+```sh
 GITUDIUM_PORT=8080 GITUDIUM_DIRECTORY=/path/to/repository ./gitudium
 ```
 
-| Option | Environment | Default |
-| --- | --- | --- |
-| `-h`, `--help` | — | Print usage and exit |
-| `-v`, `--version` | — | Print package version and exit |
-| `-p`, `--port <port>` | `GITUDIUM_PORT` | `9171` |
-| `-d`, `--directory <path>` or positional directory | `GITUDIUM_DIRECTORY` | Current directory |
+Command-line values override environment variables. Relative directory paths are resolved from the directory where you launch Gitudium. Use either a positional directory or `--directory`, not both. Put `--` before a positional directory name that begins with a dash.
 
-Command-line values override environment values. Relative paths resolve against the launch working directory. Use either `--directory` or a positional directory, not both; `--` allows positional paths beginning with a dash. Ports must be integers from 0 through 65535. Unknown options, missing values, invalid ports, and nonexistent/non-directory paths exit with status 1; help and version exit with status 0 without starting a server. Binding remains loopback-only; there is no public-host option.
+Ports must be between `0` and `65535`. Use `--port 0` to select a free port and open the URL printed at startup. If a specified port is already occupied, startup fails rather than silently choosing another port.
 
-Development accepts the same options via `pnpm run dev --port 3001 /path/to/repository` or `pnpm run dev:server --port 3001 --directory /path/to/repository`. Its backend defaults to port 3000 and requires a nonzero port; the browser remains on port 5173. The combined development launcher automatically configures Vite's API proxy for the chosen backend port. When running `dev:server` and `dev:client` separately, set the same `GITUDIUM_PORT` for both.
+## Local access and privacy
 
-`pnpm run test:artifact` checks the existing build from an isolated disposable Git repository with the copied artifact and no adjacent assets or runtime packages: startup, HTML, JavaScript/CSS loading, health and repository queries, a file diff, authenticated SSE invalidation following an external commit, unauthenticated/wrong-token/Host/Origin rejection, missing routes, and SIGTERM shutdown. Run it after building. The development browser flow is verified through reference selection, commit selection, changed-file navigation, and diff rendering.
+Gitudium binds only to **127.0.0.1** and serves your repository locally. Each launch creates a new access token carried in the printed browser URL. The browser removes the token fragment from the address bar and keeps it in tab-scoped session storage for reloads.
 
-The validated artifact is approximately **876 KiB (897,496 bytes)**; size varies with dependencies and frontend changes. Validation used Linux, Bun 1.3.14, and Git 2.43.0. The artifact requires Bun and Git; it is not a native binary. Other platforms are unvalidated. If execution reports a missing interpreter, install Bun or invoke its absolute path. If copying loses executable permissions, use `chmod +x gitudium` or invoke it with Bun. Rebuild after source changes; the artifact never reads frontend files from disk.
+- Keep the launch URL private: it grants access to the running viewer.
+- Open the full launch URL when opening a new tab.
+- After restarting Gitudium, use the newly printed URL; the old token no longer works.
+- Do not expose or forward the server port. Use trusted repositories.
 
-## Local access protection
+Access protection does not isolate repository contents from other processes, browser extensions, or people with access to the same machine or browser. View preferences are stored in browser local storage; if storage is blocked, preferences are temporary and a reload may require reopening the full launch URL.
 
-Each launch generates a random 256-bit token. The printed URL carries it in a fragment (not sent to the server); the UI removes the fragment immediately and stores the token in tab-scoped `sessionStorage` so reloads work. A fresh tab needs the full launch URL. Browsers may copy session storage when duplicating a tab or opening one with an opener; this is browser behavior, not strong isolation between tabs. If storage is blocked, access works in memory until reload. Server restart rotates the token; reopen the new printed URL if authentication fails.
+## Troubleshooting
 
-All API requests, including health and SSE, require a Bearer header. SSE uses streaming fetch so the token never appears in request URLs. Servers reject unexpected Host, Origin, and cross-site fetch metadata before routing; packaged requests must use the exact printed loopback origin. Development additionally permits the fixed Vite origin, and the launcher keeps the token stable across backend watch restarts. API responses disable caching and responses use a no-referrer policy. Tokens are not written to disk by the application; session storage is the explicitly chosen browser-side exception to otherwise nonpersistent application data.
+| Problem | What to do |
+| --- | --- |
+| Missing interpreter or Bun not found | Install Bun and ensure it is on `PATH`, or run the file with your Bun executable. |
+| Permission denied when launching | Run `chmod +x ./gitudium`, or use `bun ./gitudium`. |
+| Port already in use | Choose another port with `--port 8080`, or use `--port 0`. |
+| Repository cannot be opened | Check that the path exists and is a Git repository or a directory inside one, and that Git is available on `PATH`. |
+| Authentication fails after a restart or in a new tab | Reopen the full URL printed by the current server, including the token fragment. |
+| History appears stale | Check the live-update indicator. The viewer refreshes when it reconnects; working-tree-only edits do not trigger updates. |
+| No text diff is available | Binary files, oversized patches, and files with no textual changes show status messages instead of a patch. |
 
-Keep the launch URL private. Access protection does not isolate repository contents from other processes, browser extensions, or users with access to the same local machine/browser. Use trusted repositories and do not expose or forward its ports.
+## Build from source
+
+If you prefer to build your own copy, install **Node.js 24**, **pnpm 11.17.0**, Bun, and Git, then run:
+
+```sh
+git clone https://github.com/smmoosavi/gitudium.git
+cd gitudium
+pnpm install --frozen-lockfile
+pnpm run build
+./gitudium /path/to/repository
+```
+
+The build creates the single-file `gitudium` executable at the checkout root. You can copy that file elsewhere; only Bun and Git are needed to run it.
