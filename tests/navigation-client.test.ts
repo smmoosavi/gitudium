@@ -1,5 +1,17 @@
 import { expect, test } from "bun:test";
-import { navigationAction } from "../src/client/navigation";
+import { navigationAction, navigationKey } from "../src/client/navigation";
+
+test("arrow keys match hjkl navigation in every pane", () => {
+  for (const [arrow, key] of [["ArrowDown", "j"], ["ArrowUp", "k"], ["ArrowLeft", "h"], ["ArrowRight", "l"]] as const) {
+    expect(navigationKey(arrow)).toBe(key);
+    for (const pane of ["commits", "files", "diff"] as const) {
+      for (const [count, index] of [[3, 1], [3, -1], [0, -1]] as const) {
+        expect(navigationAction(pane, arrow, count, index, count)).toEqual(navigationAction(pane, key, count, index, count));
+      }
+    }
+  }
+  expect(navigationKey("x")).toBe("x");
+});
 
 test("j and k move one item and stop at list boundaries", () => {
   for (const pane of ["commits", "files"] as const) {

@@ -13,7 +13,7 @@ import { readFilesMode, writeFilesMode, type FilesMode } from "./files";
 import { ResizeHandle } from "./ResizeHandle";
 import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, type DiffMode } from "./diff";
-import { ignoresNavigation, navigationAction, type FocusedPane } from "./navigation";
+import { ignoresNavigation, navigationAction, navigationKey, type FocusedPane } from "./navigation";
 import { buildFileTree, type FilesNode } from "./files";
 import "./style.css";
 
@@ -56,7 +56,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
     const flatten = (nodes: FilesNode[]): string[] => nodes.flatMap(node => "children" in node ? flatten(node.children) : [node.path]);
     const paths = filesMode === "tree" ? flatten(buildFileTree(files)) : files.map(file => file.path);
     const handleKey = (event: KeyboardEvent) => {
-      if (ignoresNavigation(event) || (focusedPane === "commits" && event.key !== "l")) return;
+      if (ignoresNavigation(event) || (focusedPane === "commits" && navigationKey(event.key) !== "l")) return;
       const action = navigationAction(focusedPane, event.key, paths.length, paths.indexOf(path ?? ""), paths.length);
       if (!action) return;
       event.preventDefault();
@@ -166,7 +166,8 @@ function App() {
   const commits = history.data?.pages.flatMap(page => page.commits) ?? [];
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (focusedPane !== "commits" || ignoresNavigation(event) || (event.key !== "j" && event.key !== "k")) return;
+      const key = navigationKey(event.key);
+      if (focusedPane !== "commits" || ignoresNavigation(event) || (key !== "j" && key !== "k")) return;
       const action = navigationAction("commits", event.key, commits.length, commits.findIndex(commit => commit.id === selected), 0);
       if (action?.index === undefined) return;
       event.preventDefault();

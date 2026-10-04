@@ -1,7 +1,18 @@
 export type FocusedPane = "commits" | "files" | "diff";
 export type NavigationAction = { pane: FocusedPane; index?: number; scroll?: number };
 
+export function navigationKey(key: string): string {
+  switch (key) {
+    case "ArrowDown": return "j";
+    case "ArrowUp": return "k";
+    case "ArrowLeft": return "h";
+    case "ArrowRight": return "l";
+    default: return key;
+  }
+}
+
 export function navigationAction(pane: FocusedPane, key: string, count: number, selectedIndex: number, fileCount: number): NavigationAction | null {
+  key = navigationKey(key);
   if (key === "h") return { pane: pane === "diff" ? "files" : "commits" };
   if (key === "l") {
     if (!fileCount || pane === "diff") return null;
