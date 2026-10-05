@@ -58,7 +58,7 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 3. Select a changed file to view its diff.
 4. Use **Load more commits** to append another page of history. Pages contain 50 commits, in topological order.
 
-The graph keeps linear/rebased history in a single lane and connects branches at their shared ancestors. Disconnected histories and standalone commits remain separate; square markers identify root commits. Merge commits connect to every parent. Lines at the bottom continue into history not yet loaded; **Load more commits** extends them.
+The graph places branches from left to right by importance: main branches, development branches, HEAD, then feature branches. Main names are `main`, `trunk`, `mainline`, `default`, `stable`, and `master`; development names are `dev`, `devel`, `develop`, and `development`. These names are recognized for local branches and `origin`/`upstream` remote branches. Each branch keeps a straight first-parent spine until it joins a higher-priority ancestor. Branches with overlapping histories open to the right of higher-priority spines; non-overlapping histories reuse the leftmost available lane. References along the same first-parent history share a straight lane instead of creating unnecessary bends. Disconnected histories and standalone commits remain separate; square markers identify root commits. Merge commits connect to every parent. Lines at the bottom continue into history not yet loaded; **Load more commits** extends them.
 
 Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 

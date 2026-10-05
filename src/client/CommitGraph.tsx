@@ -9,7 +9,7 @@ export function CommitGraph({ row, columns, root }: { row: GraphRow; columns: nu
   const width = columns * laneWidth;
   return <div className="commit-graph" style={{ width }} aria-hidden="true">
     <svg width={width} height="100%" viewBox={`0 0 ${width} 100`} preserveAspectRatio="none">
-      {row.incoming.map((edge, index) => <path key={`in-${index}`} d={`M ${x(edge.from)} 0 L ${x(edge.to)} 50`} stroke={color(edge.color)} />)}
+      {row.incoming.map((edge, index) => <path key={`in-${index}`} d={`M ${x(edge.from)} 0 C ${x(edge.from)} 30 ${x(edge.to)} 20 ${x(edge.to)} 50`} stroke={color(edge.color)} />)}
       {row.outgoing.map((edge, index) => <path key={`out-${index}`} d={`M ${x(edge.from)} 50 C ${x(edge.from)} 80 ${x(edge.to)} 70 ${x(edge.to)} 100`} stroke={color(edge.color)} />)}
     </svg>
     <span className={`graph-node${root ? " graph-root" : ""}`} style={{ left: x(row.column), borderColor: color(row.column) }} />

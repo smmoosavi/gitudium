@@ -170,7 +170,7 @@ function App() {
     getNextPageParam: page => page.nextCursor ?? undefined, retry: false,
   });
   const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);
-  const graph = useMemo(() => buildCommitGraph(commits), [commits]);
+  const graph = useMemo(() => buildCommitGraph(commits, { references: references.data, head: metadata.data?.head }), [commits, references.data, metadata.data?.head]);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = navigationKey(event.key);
