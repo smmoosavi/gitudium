@@ -1,4 +1,6 @@
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
+import { buildCommitGraph } from "./graph";
+import { CommitGraph } from "./CommitGraph";
 import { createLiveRefresh } from "./live";
 import { connectEvents, loadAccessToken } from "./access";
 import { createRoot } from "react-dom/client";
@@ -167,7 +169,8 @@ function App() {
     queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: 50, cursor: pageParam }, { signal }),
     getNextPageParam: page => page.nextCursor ?? undefined, retry: false,
   });
-  const commits = history.data?.pages.flatMap(page => page.commits) ?? [];
+  const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);
+  const graph = useMemo(() => buildCommitGraph(commits), [commits]);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = navigationKey(event.key);
@@ -218,10 +221,14 @@ function App() {
         {history.isPending && <p role="status">Loading history…</p>}
         {history.isError && <Failure error={history.error} retry={() => void (history.isFetchNextPageError ? history.fetchNextPage() : history.refetch())} />}
         {history.isSuccess && commits.length === 0 && <p>No commits in this history.</p>}
-        <ol className="commits">{commits.map(commit => <li key={commit.id}><button aria-pressed={selected === commit.id} onFocus={() => setSelected(commit.id)} onClick={() => setSelected(commit.id)}>
-          <strong>{commit.subject || "(No subject)"}</strong>
-          <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
-          {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
+        <ol className="commits">{commits.map((commit, index) => <li key={commit.id}><button aria-pressed={selected === commit.id} onFocus={() => setSelected(commit.id)} onClick={() => setSelected(commit.id)}>
+          <CommitGraph row={graph.rows[index]!} columns={graph.columns} root={commit.parents.length === 0} />
+          <div className="commit-text">
+            <strong>{commit.subject || "(No subject)"}</strong>
+            <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
+            {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
+            <span className="sr-only">{commit.parents.length === 0 ? "Root commit" : `Parents: ${commit.parents.map(parent => parent.slice(0, 7)).join(", ")}`}</span>
+          </div>
         </button></li>)}</ol>
         {history.hasNextPage && <button disabled={history.isFetching} onClick={() => void history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading more…" : "Load more commits"}</button>}
       </section>

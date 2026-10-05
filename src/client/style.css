@@ -79,10 +79,16 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .history-panel > p, .history-panel > .failure { margin: 8px 16px 12px; }
 .history-panel > button { margin: 12px 16px; }
 .commits, .files { list-style: none; padding: 0; margin: 0; }
-.commits button { position: relative; width: 100%; text-align: left; border: 0; border-radius: 0; padding: 12px 16px 12px 34px; background: transparent; border-bottom: 1px solid #303237; }
-.commits button::before { content: ""; position: absolute; left: 16px; top: 18px; width: 7px; height: 7px; border: 2px solid #8b7ac1; border-radius: 50%; }
+.commits button { position: relative; display: flex; align-items: stretch; gap: 10px; width: 100%; text-align: left; border: 0; border-radius: 0; padding: 0 16px; background: transparent; box-shadow: inset 0 -1px #303237; }
+.commit-text { min-width: 0; flex: 1; padding: 12px 0; }
+.commit-graph { position: relative; flex-shrink: 0; }
+.commit-graph svg { position: absolute; inset: 0; overflow: visible; }
+.commit-graph path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.graph-node { position: absolute; top: 50%; width: 9px; height: 9px; transform: translate(-50%, -50%); border: 2px solid; border-radius: 50%; background: #25262a; }
+.graph-root { border-radius: 2px; }
 .commits button strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
-.commits button > span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+.commit-text > span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+.commit-text > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .commits button code { color: #9eb3e8; }
 .commits button:hover, .files button:hover { background: #303238; }
 .commits button[aria-pressed="true"], .files button[aria-pressed="true"] { background: #2e436e; box-shadow: inset 3px 0 #789cff; }

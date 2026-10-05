@@ -8,7 +8,7 @@ Gitudium lets you explore commits, filter history by reference, and inspect file
 
 ## Features
 
-- **Explore history:** browse commits with branch and tag labels, filter by reference, and load more history as needed.
+- **Explore history:** follow a compact, colored commit graph with branch and tag labels, filter by reference, and load more history as needed.
 - **Inspect commits:** read commit messages, author information, and changed files.
 - **Compare changes:** switch between unified and side-by-side text diffs, with line numbers and optional line wrapping.
 - **Navigate files:** choose a flat list or a collapsible folder tree.
@@ -57,6 +57,8 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 2. Select a commit to see its details and changed files.
 3. Select a changed file to view its diff.
 4. Use **Load more commits** to append another page of history. Pages contain 50 commits, in topological order.
+
+The graph keeps linear/rebased history in a single lane and connects branches at their shared ancestors. Disconnected histories and standalone commits remain separate; square markers identify root commits. Merge commits connect to every parent. Lines at the bottom continue into history not yet loaded; **Load more commits** extends them.
 
 Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 
