@@ -22,10 +22,10 @@ test("branch tips join their shared parent without interrupting its lane", () =>
   expect(graph.rows.map(row => row.column)).toEqual([0, 1, 0]);
   expect(graph.rows[1]!.incoming).toEqual([{ from: 0, to: 0, color: 0 }]);
   expect(graph.rows[1]!.outgoing).toEqual([
-    { from: 1, to: 1, color: 1 }, { from: 0, to: 0, color: 0 },
+    { from: 1, to: 0, color: 0 }, { from: 0, to: 0, color: 0 },
   ]);
   expect(graph.rows[2]!.incoming).toEqual([
-    { from: 0, to: 0, color: 0 }, { from: 1, to: 0, color: 1 },
+    { from: 0, to: 0, color: 0 },
   ]);
 });
 
@@ -81,7 +81,7 @@ test("main, development, HEAD, and features keep ordered straight first-parent s
           { name: `refs/${namespace}/${main}`, commitId: "main" },
         ] });
         expect(graph.rows.map(row => row.column)).toEqual([3, 2, 1, 0, 3, 2, 1, 0, 0]);
-        for (let index = 0; index < 8; index++) {
+        for (let index = 0; index < 4; index++) {
           const row = graph.rows[index]!;
           expect(row.outgoing[0]).toEqual({ from: row.column, to: row.column, color: row.column });
         }
@@ -115,7 +115,8 @@ test("a main tip below the first page reserves the left lane without shifting fe
   const after = buildCommitGraph([...page, commit("main", "root"), commit("root")], options);
   expect(before.rows.map(row => row.column)).toEqual([1, 1]);
   expect(before.columns).toBe(2);
-  expect(after.rows.slice(0, page.length)).toEqual(before.rows);
+  expect(after.rows.slice(0, page.length).map(row => row.column)).toEqual(before.rows.map(row => row.column));
+  expect(after.rows[1]!.outgoing).toEqual([{ from: 1, to: 0, color: 0 }]);
   expect(after.rows.map(row => row.column)).toEqual([1, 1, 0, 0]);
 });
 
@@ -149,6 +150,31 @@ test("many independent short histories do not permanently widen the graph", () =
   const graph = buildCommitGraph(commits, { references: commits.map(item => ({ name: `refs/heads/${item.id}`, commitId: item.id })) });
   expect(graph.columns).toBe(1);
   expect(graph.rows.every(row => row.column === 0 && !row.incoming.length && !row.outgoing.length)).toBe(true);
+});
+
+test("sequential features join early and reuse a single side lane instead of fanning out", () => {
+  const commits = [commit("main", "root"), commit("a", "root"), commit("b", "root"), commit("c", "root"), commit("root")];
+  const graph = buildCommitGraph(commits, { references: [{ name: "refs/heads/main", commitId: "main" }] });
+  expect(graph.columns).toBe(2);
+  expect(graph.rows.map(row => row.column)).toEqual([0, 1, 1, 1, 0]);
+  for (let index = 1; index <= 3; index++) {
+    expect(graph.rows[index]!.outgoing).toEqual([
+      { from: 1, to: 0, color: 0 }, { from: 0, to: 0, color: 0 },
+    ]);
+  }
+  expect(graph.rows.at(-1)!.incoming).toEqual([{ from: 0, to: 0, color: 0 }]);
+});
+
+test("early joins never overwrite a spine waiting for a different commit", () => {
+  const graph = buildCommitGraph([commit("main", "middle"), commit("feature", "root"), commit("middle", "root"), commit("root")], {
+    references: [{ name: "refs/heads/main", commitId: "main" }],
+  });
+  expect(graph.rows[1]!.outgoing).toEqual([
+    { from: 1, to: 1, color: 1 }, { from: 0, to: 0, color: 0 },
+  ]);
+  expect(graph.rows[2]!.incoming).toEqual([
+    { from: 0, to: 0, color: 0 }, { from: 1, to: 1, color: 1 },
+  ]);
 });
 
 test("graph renders decorative connectors and distinct root markers", () => {

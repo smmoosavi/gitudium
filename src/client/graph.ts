@@ -54,9 +54,16 @@ export function buildCommitGraph(commits: GraphCommit[], options: GraphOptions =
       chain.push(id);
       id = byId.get(id)?.parents[0];
     }
-    const start = indices.get(tip) ?? 0;
-    const last = id ?? chain.at(-1)!;
-    const end = indices.get(last) ?? Infinity;
+    const start = (tips.get(tip) ?? 3) < 3 ? 0 : indices.get(tip) ?? 0;
+    const lastIndex = indices.get(chain.at(-1)!) ?? Infinity;
+    const ancestorIndex = id ? indices.get(id) ?? Infinity : lastIndex;
+    const ancestorColumn = id ? assigned.get(id) : undefined;
+    const blocked = id && commits.some((commit, index) => index <= lastIndex
+      && assigned.get(commit.id) === ancestorColumn
+      && commit.parents[0] !== id && (indices.get(commit.parents[0]!) ?? Infinity) > lastIndex);
+    const end = (tips.get(tip) ?? 3) < 3 || blocked
+      ? ancestorIndex
+      : lastIndex + (id ? 0.5 : 0);
     let column = 0;
     while (occupied[column]?.some(range => start <= range.end && end >= range.start)) column++;
     (occupied[column] ??= []).push({ start, end });
@@ -80,8 +87,9 @@ export function buildCommitGraph(commits: GraphCommit[], options: GraphOptions =
     before.forEach((id, lane) => { if (id === commit.id) lanes[lane] = null; });
     const outgoing: GraphEdge[] = [];
     [...new Set(commit.parents)].forEach((parent, index) => {
-      // Keep a branch in its own lane until the shared ancestor's row.
-      let target = index === 0 ? column : assigned.get(parent)!;
+      // Join the parent's spine after the last unique commit, freeing the side lane.
+      let target = assigned.get(parent)!;
+      if (index === 0 && lanes[target] != null && lanes[target] !== parent) target = column;
       if (index > 0 && (target <= column || (lanes[target] != null && lanes[target] !== parent))) {
         target = Math.max(nextColumn, lanes.length);
         nextColumn = target + 1;
