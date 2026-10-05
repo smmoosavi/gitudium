@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { buildCommitGraph } from "./graph";
-import { CommitGraph } from "./CommitGraph";
+import { CommitList } from "./CommitList";
+import { historyLimit, historyPageSize, historyRequestSize, nextHistoryPage } from "./history";
 import { createLiveRefresh } from "./live";
 import { connectEvents, loadAccessToken } from "./access";
 import { createRoot } from "react-dom/client";
@@ -166,11 +167,21 @@ function App() {
   const references = useQuery({ queryKey: ["references"], enabled: metadata.isSuccess, queryFn: ({ signal }) => api.references.query(undefined, { signal }), retry: false });
   const history = useInfiniteQuery({
     queryKey: ["history", revision], enabled: metadata.isSuccess && references.isSuccess, initialPageParam: undefined as HistoryCursor | undefined,
-    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: 50, cursor: pageParam }, { signal }),
-    getNextPageParam: page => page.nextCursor ?? undefined, retry: false,
+    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: historyRequestSize(pageParam?.offset ?? 0), cursor: pageParam }, { signal }),
+    getNextPageParam: nextHistoryPage, retry: false, gcTime: 0,
   });
   const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);
   const graph = useMemo(() => buildCommitGraph(commits, { references: references.data, head: metadata.data?.head }), [commits, references.data, metadata.data?.head]);
+  useEffect(() => {
+    const panel = historyRef.current;
+    if (!panel) return;
+    const loadNearEnd = () => {
+      if (history.hasNextPage && !history.isFetching && !history.isError
+        && panel.scrollHeight - panel.scrollTop - panel.clientHeight < 400) void history.fetchNextPage();
+    };
+    panel.addEventListener("scroll", loadNearEnd, { passive: true });
+    return () => panel.removeEventListener("scroll", loadNearEnd);
+  }, [history.hasNextPage, history.isFetching, history.isError, history.fetchNextPage]);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = navigationKey(event.key);
@@ -217,19 +228,12 @@ function App() {
         </select></div>
         {references.isPending && <p role="status">Loading references…</p>}
         {references.isError && <Failure error={references.error} retry={() => void references.refetch()} />}
-        <p className="muted">Topological order · 50 commits per page</p>
+        <p className="muted">Topological order · {historyPageSize} commits per page · Up to 10,000 cached</p>
         {history.isPending && <p role="status">Loading history…</p>}
         {history.isError && <Failure error={history.error} retry={() => void (history.isFetchNextPageError ? history.fetchNextPage() : history.refetch())} />}
         {history.isSuccess && commits.length === 0 && <p>No commits in this history.</p>}
-        <ol className="commits">{commits.map((commit, index) => <li key={commit.id}><button aria-pressed={selected === commit.id} onFocus={() => setSelected(commit.id)} onClick={() => setSelected(commit.id)}>
-          <CommitGraph row={graph.rows[index]!} columns={graph.columns} root={commit.parents.length === 0} />
-          <div className="commit-text">
-            <strong>{commit.subject || "(No subject)"}</strong>
-            <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
-            {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
-            <span className="sr-only">{commit.parents.length === 0 ? "Root commit" : `Parents: ${commit.parents.map(parent => parent.slice(0, 7)).join(", ")}`}</span>
-          </div>
-        </button></li>)}</ol>
+        <CommitList key={revision} commits={commits} graph={graph} selected={selected} onSelect={setSelected} scroller={historyRef} />
+        {commits.length >= historyLimit && <p className="muted" role="status">Browser history limit reached (10,000 commits). Choose a reference to explore another history.</p>}
         {history.hasNextPage && <button disabled={history.isFetching} onClick={() => void history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading more…" : "Load more commits"}</button>}
       </section>
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />

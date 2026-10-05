@@ -12,7 +12,7 @@ test("navigation transfers DOM focus to the destination item or diff", () => {
   const file = target("file");
   const diff = target("diff");
   const viewer = {
-    querySelector: (selector: string) => selector === ".diff-content" ? diff : selector.startsWith(".commits") ? commit : file,
+    querySelector: (selector: string) => selector === ".virtual-commits" ? null : selector === ".diff-content" ? diff : selector.startsWith(".commits") ? commit : file,
     querySelectorAll: (selector: string) => selector === ".commits button" ? [target("old commit"), commit] : [target("old file"), file],
   } as unknown as HTMLElement;
   focusNavigationTarget(viewer, "commits", 1);
@@ -38,7 +38,7 @@ test("parent selections scroll into view without taking focus from the active pa
   const commit = target("selected commit");
   const file = target("selected file");
   const viewer = {
-    querySelector: (selector: string) => selector === '.commits button[aria-pressed="true"]' ? commit : file,
+    querySelector: (selector: string) => selector === ".virtual-commits" ? null : selector === '.commits button[aria-pressed="true"]' ? commit : file,
   } as unknown as HTMLElement;
   focusNavigationTarget(viewer, "commits", undefined, false);
   focusNavigationTarget(viewer, "files", undefined, false);

@@ -65,6 +65,11 @@ export function navigationAction(pane: FocusedPane, key: string, count: number, 
 
 export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number, focus = true): void {
   if (!viewer) return;
+  const virtualCommits = pane === "commits" ? viewer.querySelector<HTMLElement>(".virtual-commits") : null;
+  if (virtualCommits) {
+    virtualCommits.dispatchEvent(new CustomEvent("commit-navigation", { detail: { index, focus } }));
+    return;
+  }
   const selector = pane === "commits" ? ".commits button" : ".files button";
   const target = pane === "diff" ? viewer.querySelector<HTMLElement>(".diff-content")
     : index === undefined ? viewer.querySelector<HTMLElement>(`${selector}[aria-pressed="true"]`)
