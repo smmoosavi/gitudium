@@ -14,6 +14,12 @@ export type FileNode = { name: string; path: string; file: ChangedFile };
 export type FolderNode = { name: string; path: string; children: FilesNode[] };
 export type FilesNode = FileNode | FolderNode;
 
+export function filePaths(files: ChangedFile[], mode: FilesMode): string[] {
+  if (mode === "list") return files.map(file => file.path);
+  const flatten = (nodes: FilesNode[]): string[] => nodes.flatMap(node => "children" in node ? flatten(node.children) : [node.path]);
+  return flatten(buildFileTree(files));
+}
+
 export function buildFileTree(files: ChangedFile[]): FilesNode[] {
   const root: FolderNode = { name: "", path: "", children: [] };
   const folders = new Map<string, FolderNode>([["", root]]);

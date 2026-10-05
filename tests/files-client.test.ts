@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ChangedFile } from "../src/repository/types";
 import { ChangedFiles } from "../src/client/ChangedFiles";
-import { buildFileTree, filesStorageKey, readFilesMode, writeFilesMode } from "../src/client/files";
+import { buildFileTree, filePaths, filesStorageKey, readFilesMode, writeFilesMode } from "../src/client/files";
 
 const files: ChangedFile[] = ["root.ts", "src/z.ts", "src/nested/a.ts", "src/a.ts", "tests/a.ts"].map(path => ({ path, status: "modified", previousPath: null }));
 
@@ -16,6 +16,19 @@ test("file tree groups folders first without losing paths or merging equal basen
   expect(files[0]!.path).toBe("root.ts");
   const unusual = buildFileTree([{ ...files[0]!, path: "__proto__/constructor.ts" }]);
   expect(unusual[0]!.name).toBe("__proto__");
+});
+
+test("default file selection follows display order for each commit", () => {
+  expect(filePaths(files, "list")).toEqual(files.map(file => file.path));
+  expect(filePaths(files, "tree")).toEqual(["src/nested/a.ts", "src/a.ts", "src/z.ts", "tests/a.ts", "root.ts"]);
+  for (const mode of ["list", "tree"] as const) {
+    for (const changedFiles of [files, files.slice(1), files.slice(3), []]) {
+      const selected = filePaths(changedFiles, mode)[0] ?? null;
+      const html = renderToStaticMarkup(createElement(ChangedFiles, { files: changedFiles, mode, selected, onSelect: () => {} }));
+      expect(html.match(/aria-pressed="true"/g)?.length ?? 0).toBe(changedFiles.length ? 1 : 0);
+      if (selected) expect(html.indexOf('aria-pressed="true"')).toBeLessThan(html.indexOf("</button>"));
+    }
+  }
 });
 
 test("list and tree preserve selection and status, with collapsible tree folders", () => {

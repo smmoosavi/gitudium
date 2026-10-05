@@ -14,7 +14,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, type DiffMode } from "./diff";
 import { focusNavigationTarget, ignoresNavigation, navigationAction, navigationKey, type FocusedPane } from "./navigation";
-import { buildFileTree, type FilesNode } from "./files";
+import { filePaths } from "./files";
 import "./style.css";
 
 const token = loadAccessToken(window.location, {
@@ -43,8 +43,10 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
   id: string; diffMode: DiffMode; onDiffModeChange: (mode: DiffMode) => void;
   filesMode: FilesMode; onFilesModeChange: (mode: FilesMode) => void;
 }) {
-  const [path, setPath] = useState<string | null>(null);
+  const [selectedPath, setPath] = useState<string | null>(null);
   const commit = useQuery({ queryKey: ["commit", id], staleTime: Infinity, queryFn: ({ signal }) => api.commit.query({ revision: id }, { signal }), retry: false });
+  const paths = filePaths(commit.data?.files ?? [], filesMode);
+  const path = selectedPath ?? paths[0] ?? null;
   const diff = useQuery({
     queryKey: ["diff", id, path], enabled: path !== null, staleTime: Infinity,
     queryFn: ({ signal }) => api.diff.query({ revision: id, path: path! }, { signal }), retry: false,
@@ -52,9 +54,9 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
   const filesRef = useRef<HTMLElement>(null);
   const diffRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const files = commit.data?.files ?? [];
-    const flatten = (nodes: FilesNode[]): string[] => nodes.flatMap(node => "children" in node ? flatten(node.children) : [node.path]);
-    const paths = filesMode === "tree" ? flatten(buildFileTree(files)) : files.map(file => file.path);
+    if (selectedPath === null && path !== null) setPath(path);
+  }, [selectedPath, path]);
+  useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (ignoresNavigation(event) || (focusedPane === "commits" && navigationKey(event.key) !== "l")) return;
       const action = navigationAction(focusedPane, event.key, paths.length, paths.indexOf(path ?? ""), paths.length);
