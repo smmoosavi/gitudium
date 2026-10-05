@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { focusNavigationTarget, navigationAction, navigationKey } from "../src/client/navigation";
+import { focusNavigationTarget, navigationAction, navigationKey, parentNavigationAction } from "../src/client/navigation";
 
 test("navigation transfers DOM focus to the destination item or diff", () => {
   const calls: string[] = [];
@@ -74,6 +74,26 @@ test("diff supports page scrolling and jumping to the start or end", () => {
     for (const key of ["PageDown", "PageUp", "Home", "End"]) {
       expect(navigationAction(pane, key, 2, 0, 2)).toBeNull();
     }
+  }
+});
+
+test("n and p navigate parent items without changing the focused pane", () => {
+  for (const pane of ["files", "diff"] as const) {
+    expect(parentNavigationAction(pane, "n", 3, 0)).toEqual({ pane, index: 1 });
+    expect(parentNavigationAction(pane, "p", 3, 2)).toEqual({ pane, index: 1 });
+    expect(parentNavigationAction(pane, "n", 3, 2)).toEqual({ pane, index: 2 });
+    expect(parentNavigationAction(pane, "p", 3, 0)).toEqual({ pane, index: 0 });
+    expect(parentNavigationAction(pane, "n", 3, -1)).toEqual({ pane, index: 0 });
+    expect(parentNavigationAction(pane, "p", 3, -1)).toEqual({ pane, index: 0 });
+    expect(parentNavigationAction(pane, "n", 0, -1)).toBeNull();
+    expect(parentNavigationAction(pane, "j", 3, 0)).toBeNull();
+  }
+  for (const key of ["n", "p"]) {
+    expect(parentNavigationAction("commits", key, 3, 1)).toBeNull();
+    expect(navigationAction("commits", key, 3, 1, 3)).toBeNull();
+    expect(navigationAction("files", key, 3, 1, 3)).toBeNull();
+    expect(navigationAction("diff", key, 3, 1, 3)).toEqual({ pane: "diff", index: key === "n" ? 2 : 0 });
+    expect(navigationAction("diff", key, 0, -1, 0)).toBeNull();
   }
 });
 

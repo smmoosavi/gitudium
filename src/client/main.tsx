@@ -13,7 +13,7 @@ import { readFilesMode, writeFilesMode, type FilesMode } from "./files";
 import { ResizeHandle } from "./ResizeHandle";
 import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, type DiffMode } from "./diff";
-import { focusNavigationTarget, ignoresNavigation, navigationAction, navigationKey, type FocusedPane } from "./navigation";
+import { focusNavigationTarget, ignoresNavigation, navigationAction, navigationKey, parentNavigationAction, type FocusedPane } from "./navigation";
 import { filePaths } from "./files";
 import "./style.css";
 
@@ -66,6 +66,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
       if (action.pane === "diff" && path === null && paths.length) setPath(paths[0]!);
       const diffContent = diffRef.current;
       if (diffContent) {
+        if (action.pane === "diff" && action.index !== undefined && paths[action.index] !== path) diffContent.scrollTo({ top: 0 });
         if (action.scroll !== undefined) diffContent.scrollBy({ top: action.scroll });
         if (action.page !== undefined) diffContent.scrollBy({ top: action.page * diffContent.clientHeight });
         if (action.edge !== undefined) diffContent.scrollTo({ top: action.edge === "start" ? 0 : diffContent.scrollHeight });
@@ -82,6 +83,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
     for (let parent = button?.parentElement; parent && parent !== filesRef.current; parent = parent.parentElement) {
       if (parent instanceof HTMLDetailsElement) parent.open = true;
     }
+    button?.focus({ preventScroll: true });
     button?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [path, focusedPane, filesMode]);
   if (commit.isPending || commit.isError) return <>
@@ -175,12 +177,17 @@ function App() {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = navigationKey(event.key);
-      if (focusedPane !== "commits" || ignoresNavigation(event) || (key !== "j" && key !== "k")) return;
-      const action = navigationAction("commits", event.key, commits.length, commits.findIndex(commit => commit.id === selected), 0);
+      if (ignoresNavigation(event)) return;
+      const index = commits.findIndex(commit => commit.id === selected);
+      const action = focusedPane === "files"
+        ? parentNavigationAction(focusedPane, key, commits.length, index)
+        : focusedPane === "commits" && (key === "j" || key === "k")
+          ? navigationAction("commits", key, commits.length, index, 0)
+          : null;
       if (action?.index === undefined) return;
       event.preventDefault();
       setSelected(commits[action.index]!.id);
-      focusNavigationTarget(viewerRef.current, "commits", action.index);
+      if (action.pane === "commits") focusNavigationTarget(viewerRef.current, "commits", action.index);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);

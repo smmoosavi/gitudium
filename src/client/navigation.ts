@@ -11,9 +11,15 @@ export function navigationKey(key: string): string {
   }
 }
 
+export function parentNavigationAction(pane: FocusedPane, key: string, count: number, selectedIndex: number): NavigationAction | null {
+  if (pane === "commits" || (key !== "n" && key !== "p") || !count) return null;
+  return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex + (key === "n" ? 1 : -1))) };
+}
+
 export function navigationAction(pane: FocusedPane, key: string, count: number, selectedIndex: number, fileCount: number): NavigationAction | null {
   key = navigationKey(key);
   if (pane === "diff") {
+    if (key === "n" || key === "p") return parentNavigationAction(pane, key, count, selectedIndex);
     if (key === "j") return { pane, scroll: 60 };
     if (key === "k") return { pane, scroll: -60 };
     if (key === "h") return { pane: "files" };
