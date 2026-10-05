@@ -224,7 +224,7 @@ function App() {
         {history.isPending && <p role="status">Loading history…</p>}
         {history.isError && <Failure error={history.error} retry={() => void (history.isFetchNextPageError ? history.fetchNextPage() : history.refetch())} />}
         {history.isSuccess && commits.length === 0 && <p>No commits in this history.</p>}
-        <CommitList key={revision} ref={commitListRef} commits={commits} selected={selected} onSelect={setSelected}
+        <CommitList key={revision} ref={commitListRef} commits={commits} head={metadata.data?.head} selected={selected} onSelect={setSelected}
           canLoadMore={history.hasNextPage && !history.isFetching && !history.isError} onLoadMore={loadMoreHistory} />
         {history.isFetchingNextPage && <p role="status">Loading more history…</p>}
       </section>

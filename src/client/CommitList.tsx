@@ -1,4 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
+import { layoutCommitGraph, type CommitGraph as GraphLayout } from "./graph";
+import { CommitGraph, graphWidth } from "./CommitGraph";
 import { shouldLoadHistory } from "./history";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CommitSummary } from "../repository/types";
@@ -22,7 +24,11 @@ export const CommitList = forwardRef<CommitListHandle, {
   onSelect: (id: string) => void;
   canLoadMore?: boolean;
   onLoadMore?: () => void;
-}>(function CommitList({ commits, selected, onSelect, canLoadMore = false, onLoadMore }, ref) {
+  head?: string | null;
+}>(function CommitList({ commits, selected, onSelect, canLoadMore = false, onLoadMore, head = null }, ref) {
+  const previousGraph = useRef<GraphLayout | undefined>(undefined);
+  const graph = useMemo(() => layoutCommitGraph(commits, head, previousGraph.current), [commits, head]);
+  useLayoutEffect(() => { previousGraph.current = graph; }, [graph]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingFocus = useRef<number | null>(null);
   const virtualizer = useVirtualizer({
@@ -73,7 +79,10 @@ export const CommitList = forwardRef<CommitListHandle, {
           aria-posinset={item.index + 1} aria-setsize={commits.length}
           style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${item.start}px)` }}>
           <button data-commit-index={item.index} aria-pressed={selected === commit.id}
+            style={{ paddingLeft: graphWidth(graph.width) + 8 }}
             onFocus={() => onSelect(commit.id)} onClick={() => onSelect(commit.id)}>
+            <CommitGraph row={graph.rows[item.index]!} width={graph.width} />
+            {commit.parents.length === 0 && <span className="sr-only">Root commit. </span>}
             <strong>{commit.subject || "(No subject)"}</strong>
             <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
             {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}

@@ -82,7 +82,11 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .history-panel > button { margin: 12px 16px; }
 .commits, .files { list-style: none; padding: 0; margin: 0; }
 .commits button { position: relative; width: 100%; text-align: left; border: 0; border-radius: 0; padding: 12px 16px 12px 34px; background: transparent; border-bottom: 1px solid #303237; }
-.commits button::before { content: ""; position: absolute; left: 16px; top: 18px; width: 7px; height: 7px; border: 2px solid #8b7ac1; border-radius: 50%; }
+.commit-graph { position: absolute; top: 0; left: 0; bottom: 0; pointer-events: none; overflow: hidden; }
+.commit-graph path { fill: none; stroke-width: 2; }
+.commit-graph circle { fill: #25262a; stroke-width: 2; }
+.commits button[aria-pressed="true"] .commit-graph circle { fill: #2e436e; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .commits button strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
 .commits button > span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
 .commits button code { color: #9eb3e8; }
