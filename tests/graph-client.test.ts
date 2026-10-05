@@ -177,6 +177,53 @@ test("early joins never overwrite a spine waiting for a different commit", () =>
   ]);
 });
 
+test("a side branch forks right of its parent even when a lane is free on the left", () => {
+  const graph = buildCommitGraph([
+    commit("main", "root"), commit("release", "release-base"),
+    commit("hotfix", "release-base"), commit("release-base", "root"), commit("root"),
+  ], { references: [
+    { name: "refs/heads/main", commitId: "main" },
+    { name: "refs/heads/release", commitId: "release" },
+    { name: "refs/heads/hotfix", commitId: "hotfix" },
+  ] });
+  expect(graph.rows.map(row => row.column)).toEqual([0, 1, 2, 1, 0]);
+  expect(graph.rows[2]!.outgoing[0]).toEqual({ from: 2, to: 1, color: 1 });
+});
+
+test("a sole descendant of an important ancestor continues straight instead of opening a side lane", () => {
+  for (const ancestorRef of ["refs/heads/main", "refs/remotes/origin/master"]) {
+    const graph = buildCommitGraph([commit("feature", "middle"), commit("middle", "main"), commit("main")], {
+      references: [{ name: ancestorRef, commitId: "main" }, { name: "refs/heads/feature", commitId: "feature" }],
+    });
+    expect(graph.columns).toBe(1);
+    expect(graph.rows.map(row => row.column)).toEqual([0, 0, 0]);
+    expect(graph.rows[1]!.outgoing).toEqual([{ from: 0, to: 0, color: 0 }]);
+  }
+});
+
+test("a feature continues straight above HEAD when there is no competing child", () => {
+  const graph = buildCommitGraph([commit("feature", "head"), commit("head", "root"), commit("root")], {
+    head: "head", references: [{ name: "refs/heads/feature", commitId: "feature" }],
+  });
+  expect(graph.columns).toBe(1);
+  expect(graph.rows.every(row => row.column === 0)).toBe(true);
+});
+
+test("the first child continues straight above a development tip while later siblings fork right", () => {
+  const graph = buildCommitGraph([
+    commit("aa24ce00", "6259cc26"), commit("6259cc26", "864bc19"),
+    commit("checkpoint"), commit("69eb29ec", "864bc19"), commit("864bc19", "root"), commit("root"),
+  ], { references: [
+    { name: "refs/heads/develop", commitId: "864bc19" },
+    { name: "refs/heads/fix-import-tunnel-dirty-try2", commitId: "aa24ce00" },
+    { name: "refs/heads/fix-import-tunnel-dirty", commitId: "69eb29ec" },
+  ] });
+  expect(graph.rows[0]!.column).toBe(0);
+  expect(graph.rows[1]!.column).toBe(0);
+  expect(graph.rows[1]!.outgoing).toEqual([{ from: 0, to: 0, color: 0 }]);
+  expect(graph.rows[3]!.column).toBeGreaterThan(graph.rows[4]!.column);
+});
+
 test("graph renders decorative connectors and distinct root markers", () => {
   const graph = buildCommitGraph([commit("tip", "root"), commit("root")]);
   const tip = renderToStaticMarkup(createElement(CommitGraph, { row: graph.rows[0]!, columns: graph.columns, root: false }));

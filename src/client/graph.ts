@@ -44,8 +44,17 @@ export function buildCommitGraph(commits: GraphCommit[], options: GraphOptions =
   if (options.head) addTip(options.head, 2);
   const assigned = new Map<string, number>();
   const indices = new Map(commits.map((commit, index) => [commit.id, index]));
-  const occupied: { start: number; end: number }[][] = [];
+  const children = new Map<string, Set<string>>();
+  for (const commit of commits) {
+    for (const parent of commit.parents) {
+      const ids = children.get(parent) ?? new Set<string>();
+      ids.add(commit.id);
+      children.set(parent, ids);
+    }
+  }
+  const occupied: { start: number; end: number; tip: string }[][] = [];
   let nextColumn = 0;
+  const extended = new Set<string>();
   const assignChain = (tip: string) => {
     if (assigned.has(tip)) return;
     const chain: string[] = [];
@@ -64,9 +73,16 @@ export function buildCommitGraph(commits: GraphCommit[], options: GraphOptions =
     const end = (tips.get(tip) ?? 3) < 3 || blocked
       ? ancestorIndex
       : lastIndex + (id ? 0.5 : 0);
-    let column = 0;
-    while (occupied[column]?.some(range => start <= range.end && end >= range.start)) column++;
-    (occupied[column] ??= []).push({ start, end });
+    const canContinue = id && !extended.has(id)
+      && (children.get(id)?.size === 1 || occupied[ancestorColumn!]?.some(range => range.tip === id))
+      && !occupied[ancestorColumn!]?.some(range => range.tip !== id
+        && start <= range.end && lastIndex >= range.start);
+    let column = canContinue ? ancestorColumn! : ancestorColumn === undefined ? 0 : ancestorColumn + 1;
+    if (!canContinue) {
+      while (occupied[column]?.some(range => start <= range.end && end >= range.start)) column++;
+    }
+    if (canContinue) extended.add(id!);
+    (occupied[column] ??= []).push({ start, end, tip });
     nextColumn = Math.max(nextColumn, column + 1);
     for (const item of chain) assigned.set(item, column);
   };
