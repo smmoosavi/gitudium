@@ -25,6 +25,16 @@ test("navigation transfers DOM focus to the destination item or diff", () => {
   expect(calls).toEqual(["commit", "file", "diff", "file", "commit"]);
 });
 
+test("virtual commit navigation uses absolute dataset indices, not mounted row positions", () => {
+  let selector = "";
+  const viewer = {
+    querySelector: (value: string) => { selector = value; return null; },
+    querySelectorAll: () => { throw new Error("Mounted row positions are not dataset indices"); },
+  } as unknown as HTMLElement;
+  focusNavigationTarget(viewer, "commits", 9999);
+  expect(selector).toBe('.commits button[data-commit-index="9999"]');
+});
+
 test("parent selections scroll into view without taking focus from the active pane", () => {
   const scrolled: string[] = [];
   const target = (name: string) => ({

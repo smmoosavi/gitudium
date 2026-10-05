@@ -69,7 +69,9 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .diff-panel > .panel-heading { flex-shrink: 0; }
 .diff-content { min-height: 0; flex: 1; overflow: auto; }
 .files-panel { background: #25262a; }
-.history-panel { border-right: 1px solid var(--border); background: #25262a; }
+.history-panel { border-right: 1px solid var(--border); background: #25262a; display: flex; flex-direction: column; overflow: hidden; }
+.history-panel > :not(.commit-scroll) { flex-shrink: 0; }
+.commit-scroll { flex: 1; min-height: 0; overflow: auto; overflow-anchor: none; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; min-height: 41px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .panel-heading > code, .count { font-size: 11px; color: var(--muted); }
 .history-toolbar { padding: 12px 16px 8px; display: flex; align-items: center; gap: 10px; }

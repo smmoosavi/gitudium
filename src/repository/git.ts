@@ -1,4 +1,5 @@
 import { RepositoryError } from "./types";
+import { HISTORY_CHUNK_SIZE } from "./limits";
 import type {
   ChangedFile, CommitDetails, CommitSummary, DiffResult, HistoryPage,
   HistoryQuery, Reference, RepositoryMetadata, RepositoryReader,
@@ -159,7 +160,7 @@ export class GitRepositoryReader implements RepositoryReader {
 
   async history(query: HistoryQuery = {}, signal?: AbortSignal): Promise<HistoryPage> {
     const limit = query.limit ?? 50;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 200) invalid("History limit must be between 1 and 200.");
+    if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_CHUNK_SIZE) invalid(`History limit must be between 1 and ${HISTORY_CHUNK_SIZE}.`);
     if (query.cursor && query.revision !== undefined) invalid("Use either a cursor or a revision, not both.");
     const refs = await this.references(signal);
     let tips: string[];

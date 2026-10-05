@@ -56,7 +56,9 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 1. Choose a **Reference** in the log pane. **All references + HEAD** is selected by default.
 2. Select a commit to see its details and changed files.
 3. Select a changed file to view its diff.
-4. Use **Load more commits** to append another page of history. Pages contain 50 commits, in topological order.
+4. Scroll through history. The initial request loads up to 10,000 commit summaries in topological order; another chunk loads automatically near the bottom. Loaded chunks stay in browser memory without a total-count cap, while only visible rows and a small overscan are rendered. Commit messages, changed files, and diffs load when selected. Git output is still subject to the server's 8 MiB per-command safety limit.
+
+The history chunk size and server request maximum share `HISTORY_CHUNK_SIZE` in [src/repository/limits.ts](src/repository/limits.ts). Change that constant to tune both together. Timeout durations and scroll distances are unrelated settings.
 
 Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 
@@ -68,7 +70,7 @@ In the focused diff, **Page Up/Page Down** scroll by one visible page, and **Hom
 
 Arrow keys work the same way: **Down/Up** select items or scroll the diff, and **Right/Left** move focus forward/back between panes. Focused view toggles and dividers retain their own arrow-key controls.
 
-For commits without changed files, `l` or **Right** keeps focus on commits. Selection stops at the ends of the loaded list; use **Load more commits** for additional history. Clicking a pane also focuses it. Shortcuts are ignored in text fields, the reference selector, and when modifier keys are held.
+For commits without changed files, `l` or **Right** keeps focus on commits. Selection stops at the ends of the loaded list; approaching the bottom automatically loads more history. Clicking a pane also focuses it. Shortcuts are ignored in text fields, the reference selector, and when modifier keys are held.
 
 ### Customize the view
 

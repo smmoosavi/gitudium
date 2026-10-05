@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequestHandler } from "../src/server/http";
 import type { AppRouter } from "../src/server/router";
+import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
 
 let directory: string;
 let server: ReturnType<typeof Bun.serve>;
@@ -63,7 +64,8 @@ test("repository queries navigate empty history, references, pages, details and 
 });
 
 test("repository API validates limits, revisions, paths and cursors", async () => {
-  for (const limit of [0, 201, 1.5]) await expect(api.history.query({ limit })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+  expect((await api.history.query({ limit: HISTORY_CHUNK_SIZE })).commits).toHaveLength(2);
+  for (const limit of [0, HISTORY_CHUNK_SIZE + 1, 1.5]) await expect(api.history.query({ limit })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.commit.query({ revision: "--all" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.diff.query({ revision: "HEAD", path: "../outside" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.history.query({ cursor: { tips: ["--all"], offset: -1 } })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });

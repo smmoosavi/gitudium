@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
+import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -175,7 +176,8 @@ test("validates unsafe inputs and normalizes failed commands and cancellation", 
   for (const name of ["../file", "/file", "file\0", "a/../file"]) {
     await expect(reader.diff(id, name)).rejects.toMatchObject({ code: "INVALID_INPUT" });
   }
-  await expect(reader.history({ limit: 201 })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  expect((await reader.history({ limit: HISTORY_CHUNK_SIZE })).commits).toHaveLength(1);
+  await expect(reader.history({ limit: HISTORY_CHUNK_SIZE + 1 })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await expect(reader.history({ cursor: { tips: ["--all"], offset: 0 } })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await expect(reader.history({}, AbortSignal.abort())).rejects.toMatchObject({ code: "CANCELLED" });
   await rm(join(path, ".git"), { recursive: true });

@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { RepositoryError } from "../repository/types";
+import { HISTORY_CHUNK_SIZE } from "../repository/limits";
 import type { RepositoryReader } from "../repository/types";
 
 const t = initTRPC.context<{ reader: () => Promise<RepositoryReader> }>().create();
@@ -32,7 +33,7 @@ export const appRouter = t.router({
   references: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.references(signal))),
   history: repositoryProcedure.input(z.object({
     revision: revision.optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(HISTORY_CHUNK_SIZE).optional(),
     cursor: z.object({ tips: z.array(objectId).max(4096), offset: z.number().int().min(0).max(1_000_000) }).optional(),
   }).optional()).query(({ ctx, input, signal }) => read(() => ctx.reader.history(input, signal))),
   commit: repositoryProcedure.input(z.object({ revision })).query(({ ctx, input, signal }) => read(() => ctx.reader.commit(input.revision, signal))),

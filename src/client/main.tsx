@@ -1,4 +1,7 @@
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CommitList, type CommitListHandle } from "./CommitList";
+import { nextHistoryCursor } from "./history";
+import { HISTORY_CHUNK_SIZE } from "../repository/limits";
 import { createLiveRefresh } from "./live";
 import { connectEvents, loadAccessToken } from "./access";
 import { createRoot } from "react-dom/client";
@@ -154,6 +157,7 @@ function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [focusedPane, setFocusedPane] = useState<FocusedPane>("commits");
   const historyRef = useRef<HTMLElement>(null);
+  const commitListRef = useRef<CommitListHandle>(null);
   const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
   useEffect(() => {
     const refresh = createLiveRefresh(queryClient);
@@ -164,10 +168,11 @@ function App() {
   const references = useQuery({ queryKey: ["references"], enabled: metadata.isSuccess, queryFn: ({ signal }) => api.references.query(undefined, { signal }), retry: false });
   const history = useInfiniteQuery({
     queryKey: ["history", revision], enabled: metadata.isSuccess && references.isSuccess, initialPageParam: undefined as HistoryCursor | undefined,
-    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: 50, cursor: pageParam }, { signal }),
-    getNextPageParam: page => page.nextCursor ?? undefined, retry: false,
+    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: HISTORY_CHUNK_SIZE, cursor: pageParam }, { signal }),
+    getNextPageParam: nextHistoryCursor, retry: false,
   });
-  const commits = history.data?.pages.flatMap(page => page.commits) ?? [];
+  const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);
+  const loadMoreHistory = useCallback(() => { void history.fetchNextPage(); }, [history.fetchNextPage]);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = navigationKey(event.key);
@@ -181,13 +186,14 @@ function App() {
       if (action?.index === undefined) return;
       event.preventDefault();
       setSelected(commits[action.index]!.id);
-      if (action.pane === "commits") focusNavigationTarget(viewerRef.current, "commits", action.index);
+      commitListRef.current?.reveal(action.index, action.pane === "commits");
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [commits, selected, focusedPane]);
   useEffect(() => {
-    focusNavigationTarget(viewerRef.current, "commits", undefined, false);
+    const index = commits.findIndex(commit => commit.id === selected);
+    commitListRef.current?.reveal(index, focusedPane === "commits" && selected !== null);
   }, [selected, focusedPane]);
   const repositoryPath = metadata.data?.root ?? metadata.data?.gitDirectory;
   const repositoryName = repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1);
@@ -205,7 +211,7 @@ function App() {
     </div>
     <div ref={viewerRef} className={`viewer layout-${mode}`} style={{ gridTemplateColumns: columns, gridTemplateRows: mode === "columns" ? "minmax(0, 1fr)" : split(sizes.secondary) }}>
       <section ref={historyRef} className={`history-panel${focusedPane === "commits" ? " pane-focused" : ""}`} aria-labelledby="history-title" onPointerDown={() => setFocusedPane("commits")} onFocusCapture={() => setFocusedPane("commits")}>
-        <div className="panel-heading"><h2 id="history-title">Log</h2><span className="count">{commits.length} loaded</span></div>
+        <div className="panel-heading"><h2 id="history-title">Log</h2></div>
         <div className="history-toolbar"><label htmlFor="reference">⑂ Reference</label>
         <select id="reference" value={revision} onChange={event => { setRevision(event.target.value); setSelected(null); setFocusedPane("commits"); }}>
           <option value="">All references + HEAD</option>
@@ -214,16 +220,13 @@ function App() {
         </select></div>
         {references.isPending && <p role="status">Loading references…</p>}
         {references.isError && <Failure error={references.error} retry={() => void references.refetch()} />}
-        <p className="muted">Topological order · 50 commits per page</p>
+        <p className="muted">Topological order</p>
         {history.isPending && <p role="status">Loading history…</p>}
         {history.isError && <Failure error={history.error} retry={() => void (history.isFetchNextPageError ? history.fetchNextPage() : history.refetch())} />}
         {history.isSuccess && commits.length === 0 && <p>No commits in this history.</p>}
-        <ol className="commits">{commits.map(commit => <li key={commit.id}><button aria-pressed={selected === commit.id} onFocus={() => setSelected(commit.id)} onClick={() => setSelected(commit.id)}>
-          <strong>{commit.subject || "(No subject)"}</strong>
-          <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
-          {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
-        </button></li>)}</ol>
-        {history.hasNextPage && <button disabled={history.isFetching} onClick={() => void history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading more…" : "Load more commits"}</button>}
+        <CommitList key={revision} ref={commitListRef} commits={commits} selected={selected} onSelect={setSelected}
+          canLoadMore={history.hasNextPage && !history.isFetching && !history.isError} onLoadMore={loadMoreHistory} />
+        {history.isFetchingNextPage && <p role="status">Loading more history…</p>}
       </section>
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
