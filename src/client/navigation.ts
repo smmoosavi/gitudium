@@ -63,7 +63,7 @@ export function navigationAction(pane: FocusedPane, key: string, count: number, 
   return null;
 }
 
-export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number): void {
+export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number, focus = true): void {
   if (!viewer) return;
   const selector = pane === "commits" ? ".commits button" : ".files button";
   const target = pane === "diff" ? viewer.querySelector<HTMLElement>(".diff-content")
@@ -73,7 +73,7 @@ export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedP
   for (let parent = target.parentElement; parent && parent !== viewer; parent = parent.parentElement) {
     if (parent instanceof HTMLDetailsElement) parent.open = true;
   }
-  target.focus({ preventScroll: true });
+  if (focus) target.focus({ preventScroll: true });
   target.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 

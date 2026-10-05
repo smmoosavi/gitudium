@@ -25,6 +25,26 @@ test("navigation transfers DOM focus to the destination item or diff", () => {
   expect(calls).toEqual(["commit", "file", "diff", "file", "commit"]);
 });
 
+test("parent selections scroll into view without taking focus from the active pane", () => {
+  const scrolled: string[] = [];
+  const target = (name: string) => ({
+    parentElement: null,
+    focus: () => { throw new Error("Parent navigation must not move focus"); },
+    scrollIntoView: (options: ScrollIntoViewOptions) => {
+      expect(options).toEqual({ block: "nearest", inline: "nearest" });
+      scrolled.push(name);
+    },
+  });
+  const commit = target("selected commit");
+  const file = target("selected file");
+  const viewer = {
+    querySelector: (selector: string) => selector === '.commits button[aria-pressed="true"]' ? commit : file,
+  } as unknown as HTMLElement;
+  focusNavigationTarget(viewer, "commits", undefined, false);
+  focusNavigationTarget(viewer, "files", undefined, false);
+  expect(scrolled).toEqual(["selected commit", "selected file"]);
+});
+
 test("arrow keys match hjkl navigation in every pane", () => {
   for (const [arrow, key] of [["ArrowDown", "j"], ["ArrowUp", "k"], ["ArrowLeft", "h"], ["ArrowRight", "l"]] as const) {
     expect(navigationKey(arrow)).toBe(key);

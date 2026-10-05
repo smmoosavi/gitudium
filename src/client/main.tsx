@@ -78,13 +78,7 @@ function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChan
     return () => window.removeEventListener("keydown", handleKey);
   }, [commit.data, filesMode, focusedPane, onPaneFocus, path]);
   useEffect(() => {
-    if (focusedPane !== "files") return;
-    const button = filesRef.current?.querySelector<HTMLButtonElement>('.files button[aria-pressed="true"]');
-    for (let parent = button?.parentElement; parent && parent !== filesRef.current; parent = parent.parentElement) {
-      if (parent instanceof HTMLDetailsElement) parent.open = true;
-    }
-    button?.focus({ preventScroll: true });
-    button?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    focusNavigationTarget(filesRef.current?.parentElement ?? null, "files", undefined, focusedPane === "files");
   }, [path, focusedPane, filesMode]);
   if (commit.isPending || commit.isError) return <>
     <section className="files-panel" aria-label="Commit details and changed files">{commit.isPending ? <p className="empty-hint" role="status">Loading commit…</p> : <Failure error={commit.error} retry={() => void commit.refetch()} />}</section>
@@ -193,7 +187,7 @@ function App() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [commits, selected, focusedPane]);
   useEffect(() => {
-    if (focusedPane === "commits") historyRef.current?.querySelector('.commits button[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    focusNavigationTarget(viewerRef.current, "commits", undefined, false);
   }, [selected, focusedPane]);
   const repositoryPath = metadata.data?.root ?? metadata.data?.gitDirectory;
   const repositoryName = repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1);
