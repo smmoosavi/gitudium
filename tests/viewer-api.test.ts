@@ -68,7 +68,37 @@ test("repository API validates limits, revisions, paths and cursors", async () =
   for (const limit of [0, HISTORY_CHUNK_SIZE + 1, 1.5]) await expect(api.history.query({ limit })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.commit.query({ revision: "--all" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.diff.query({ revision: "HEAD", path: "../outside" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
-  await expect(api.history.query({ cursor: { tips: ["--all"], offset: -1 } })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+  await expect(api.history.query({ cursor: { snapshot: "--all", offset: -1 } })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+});
+
+test("history pagination uses short GET URLs even with many distinct reference tips", async () => {
+  const tree = await git("rev-parse", "HEAD^{tree}");
+  const parent = await git("rev-parse", "HEAD");
+  for (let i = 0; i < 100; i++) {
+    const id = await git("commit-tree", tree, "-p", parent, "-m", `API tip ${i}`);
+    await git("update-ref", `refs/custom/api-${i}`, id);
+  }
+  const urls: string[] = [];
+  const client = createTRPCClient<AppRouter>({ links: [httpBatchLink({
+    url: new URL("/api/trpc", server.url).href,
+    fetch(url, options) {
+      urls.push(String(url));
+      return fetch(url, options);
+    },
+  })] });
+  const expected = (await api.history.query({ limit: 200 })).commits.map(commit => commit.id);
+  const first = await client.history.query({ limit: 7 });
+  const seen = first.commits.map(commit => commit.id);
+  let cursor = first.nextCursor;
+  while (cursor) {
+    const page = await client.history.query({ limit: 7, cursor });
+    seen.push(...page.commits.map(commit => commit.id));
+    cursor = page.nextCursor;
+  }
+  expect(seen).toEqual(expected);
+  expect(urls.length).toBeGreaterThan(1);
+  expect(urls.every(url => url.length < 512)).toBe(true);
+  await expect(client.history.query({ cursor: { snapshot: "f".repeat(64), offset: 1 } })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" }, message: expect.stringContaining("expired") });
 });
 
 test("discovery failures become clear API errors without breaking health", async () => {

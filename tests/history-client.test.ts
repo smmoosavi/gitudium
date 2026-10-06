@@ -3,7 +3,7 @@ import { nextHistoryCursor, shouldLoadHistory } from "../src/client/history";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
 import type { HistoryPage } from "../src/repository/types";
 
-const cursor = { tips: ["a".repeat(40)], offset: 200 };
+const cursor = { snapshot: "a".repeat(64), offset: 200 };
 const page = (count: number, nextCursor: HistoryPage["nextCursor"] = cursor): HistoryPage => ({
   commits: Array(count).fill({}), nextCursor,
 });

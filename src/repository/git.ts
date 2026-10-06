@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
 import type {
@@ -10,6 +11,7 @@ const DETAILS = `${SUMMARY}%x00%cn%x00%ce%x00%cI%x00%B`;
 const MAX_OUTPUT = 8 * 1024 * 1024;
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
+const MAX_HISTORY_SNAPSHOTS = 128;
 
 function invalid(message: string): never {
   throw new RepositoryError("INVALID_INPUT", message);
@@ -29,6 +31,7 @@ function validatePath(path: string): void {
 
 export class GitRepositoryReader implements RepositoryReader {
   private active = 0;
+  private readonly historySnapshots = new Map<string, string[]>();
 
   private constructor(private readonly cwd: string) {}
 
@@ -162,13 +165,18 @@ export class GitRepositoryReader implements RepositoryReader {
     const limit = query.limit ?? 50;
     if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_CHUNK_SIZE) invalid(`History limit must be between 1 and ${HISTORY_CHUNK_SIZE}.`);
     if (query.cursor && query.revision !== undefined) invalid("Use either a cursor or a revision, not both.");
-    const refs = await this.references(signal);
     let tips: string[];
+    let snapshot: string | undefined;
     let offset = 0;
     if (query.cursor) {
       const cursor = query.cursor;
-      if (!Array.isArray(cursor.tips) || cursor.tips.length > MAX_TIPS || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0 || cursor.offset > 1_000_000 || cursor.tips.some(id => typeof id !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(id))) invalid("Invalid history cursor.");
-      tips = [...cursor.tips];
+      if (typeof cursor.snapshot !== "string" || !/^[a-f0-9]{64}$/.test(cursor.snapshot) || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0 || cursor.offset > 1_000_000) invalid("Invalid history cursor.");
+      snapshot = cursor.snapshot;
+      const saved = this.historySnapshots.get(snapshot);
+      if (!saved) invalid("History cursor expired; reload history to start a new snapshot.");
+      tips = saved;
+      this.historySnapshots.delete(snapshot);
+      this.historySnapshots.set(snapshot, tips);
       offset = cursor.offset;
     } else if (query.revision !== undefined) {
       tips = [await this.resolve(query.revision, signal)];
@@ -190,12 +198,21 @@ export class GitRepositoryReader implements RepositoryReader {
       if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
     }
     if (!tips.length) return { commits: [], nextCursor: null };
+    const refs = await this.references(signal);
     const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
     const fields = output.split("\0");
     if (fields.at(-1) === "") fields.pop();
     const commits: CommitSummary[] = [];
     for (let i = 0; i < fields.length; i += 7) commits.push(this.summary(fields.slice(i, i + 7), refs));
-    return { commits: commits.slice(0, limit), nextCursor: commits.length > limit ? { tips, offset: offset + limit } : null };
+    if (commits.length <= limit) return { commits, nextCursor: null };
+    snapshot ??= createHash("sha256").update(tips.join("\n")).digest("hex");
+    // Keep immutable tips server-side; cursor size must not grow with ref count.
+    this.historySnapshots.delete(snapshot);
+    this.historySnapshots.set(snapshot, tips);
+    while (this.historySnapshots.size > MAX_HISTORY_SNAPSHOTS) {
+      this.historySnapshots.delete(this.historySnapshots.keys().next().value!);
+    }
+    return { commits: commits.slice(0, limit), nextCursor: { snapshot, offset: offset + limit } };
   }
 
   private async comparison(id: string, signal?: AbortSignal): Promise<string[]> {

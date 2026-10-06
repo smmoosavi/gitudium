@@ -38,7 +38,7 @@ export interface CommitSummary {
 }
 
 export interface HistoryCursor {
-  tips: string[];
+  snapshot: string;
   offset: number;
 }
 

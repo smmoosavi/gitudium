@@ -6,7 +6,7 @@ import type { RepositoryReader } from "../repository/types";
 
 const t = initTRPC.context<{ reader: () => Promise<RepositoryReader> }>().create();
 const revision = z.string().min(1).max(1024).refine(value => !value.startsWith("-") && !/[\x00-\x20\x7f]/.test(value), "Expected a non-option revision.");
-const objectId = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+const snapshotId = z.string().regex(/^[a-f0-9]{64}$/);
 const path = z.string().min(1).max(8192).refine(value => !value.startsWith("/") && !value.includes("\0") && !value.split("/").some(part => !part || part === "." || part === ".."), "Expected a repository-relative path.");
 
 const repositoryProcedure = t.procedure.use(async ({ ctx, next }) =>
@@ -34,7 +34,7 @@ export const appRouter = t.router({
   history: repositoryProcedure.input(z.object({
     revision: revision.optional(),
     limit: z.number().int().min(1).max(HISTORY_CHUNK_SIZE).optional(),
-    cursor: z.object({ tips: z.array(objectId).max(4096), offset: z.number().int().min(0).max(1_000_000) }).optional(),
+    cursor: z.object({ snapshot: snapshotId, offset: z.number().int().min(0).max(1_000_000) }).optional(),
   }).optional()).query(({ ctx, input, signal }) => read(() => ctx.reader.history(input, signal))),
   commit: repositoryProcedure.input(z.object({ revision })).query(({ ctx, input, signal }) => read(() => ctx.reader.commit(input.revision, signal))),
   diff: repositoryProcedure.input(z.object({ revision, path: path.optional() })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal))),

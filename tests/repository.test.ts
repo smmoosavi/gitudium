@@ -92,6 +92,56 @@ test("all-ref topological history returns parents and decorations with snapshot 
   expect(selected.commits.map(item => item.id)).toEqual([root]);
 });
 
+test("history cursors stay small across many distinct tips and preserve the full snapshot", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  const tree = await git(path, "rev-parse", "HEAD^{tree}");
+  for (let i = 0; i < 160; i++) {
+    const id = await git(path, "commit-tree", tree, "-p", root, "-m", `tip ${i}`);
+    await git(path, "update-ref", `refs/custom/tip-${i}`, id);
+  }
+  const reader = await GitRepositoryReader.discover(path);
+  const expected = (await reader.history({ limit: 200 })).commits.map(item => item.id);
+  const first = await reader.history({ limit: 17 });
+  expect(JSON.stringify(first.nextCursor).length).toBeLessThan(120);
+  const seen = first.commits.map(item => item.id);
+  await git(path, "update-ref", "-d", "refs/custom/tip-159");
+  await commit(path, "later", "later", "later");
+  let cursor = first.nextCursor;
+  while (cursor) {
+    const page = await reader.history({ cursor, limit: 17 });
+    seen.push(...page.commits.map(item => item.id));
+    if (page.nextCursor) {
+      expect(page.nextCursor.snapshot).toBe(first.nextCursor!.snapshot);
+      expect(JSON.stringify(page.nextCursor).length).toBeLessThan(120);
+    }
+    cursor = page.nextCursor;
+  }
+  expect(seen).toEqual(expected);
+  expect((await reader.history({ cursor: first.nextCursor!, limit: 17 })).commits.map(item => item.id)).toEqual(expected.slice(17, 34));
+  const other = await GitRepositoryReader.discover(path);
+  await expect(other.history({ cursor: first.nextCursor! })).rejects.toMatchObject({ code: "INVALID_INPUT", message: expect.stringContaining("expired") });
+});
+
+test("history snapshots are reused and evicted least recently used with a bounded cache", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  const tree = await git(path, "rev-parse", "HEAD^{tree}");
+  const reader = await GitRepositoryReader.discover(path);
+  const cursors = [];
+  for (let i = 0; i < 128; i++) {
+    const id = await git(path, "commit-tree", tree, "-p", root, "-m", `snapshot ${i}`);
+    const page = await reader.history({ revision: id, limit: 1 });
+    cursors.push(page.nextCursor!);
+    expect((await reader.history({ revision: id, limit: 1 })).nextCursor).toEqual(page.nextCursor);
+  }
+  expect((await reader.history({ cursor: cursors[0], limit: 1 })).commits[0].id).toBe(root);
+  const id = await git(path, "commit-tree", tree, "-p", root, "-m", "overflow");
+  await reader.history({ revision: id, limit: 1 });
+  await expect(reader.history({ cursor: cursors[1] })).rejects.toMatchObject({ code: "INVALID_INPUT", message: expect.stringContaining("expired") });
+  expect((await reader.history({ cursor: cursors[0], limit: 1 })).commits[0].id).toBe(root);
+});
+
 test("root commits, unusual literal paths, binary and oversized diffs", async () => {
   const path = await fixture();
   const name = "-odd\tline\n☃.txt";
@@ -178,7 +228,7 @@ test("validates unsafe inputs and normalizes failed commands and cancellation", 
   }
   expect((await reader.history({ limit: HISTORY_CHUNK_SIZE })).commits).toHaveLength(1);
   await expect(reader.history({ limit: HISTORY_CHUNK_SIZE + 1 })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-  await expect(reader.history({ cursor: { tips: ["--all"], offset: 0 } })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  await expect(reader.history({ cursor: { snapshot: "--all", offset: 0 } })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await expect(reader.history({}, AbortSignal.abort())).rejects.toMatchObject({ code: "CANCELLED" });
   await rm(join(path, ".git"), { recursive: true });
   await expect(reader.references()).rejects.toMatchObject({ code: "GIT_FAILED" });
