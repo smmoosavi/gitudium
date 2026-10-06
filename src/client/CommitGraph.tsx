@@ -1,7 +1,6 @@
 import type { GraphRow } from "./graph";
 
-export const graphLaneWidth = 16;
-export const graphWidth = (lanes: number) => lanes * graphLaneWidth + 16;
+import { graphLaneWidth, graphWidth } from "./graphViewport";
 const x = (lane: number) => 16 + lane * graphLaneWidth;
 const colors = ["#9eb3e8", "#b9a4ed", "#80c8b5", "#e4b878", "#d593b8", "#89bfdc"];
 const color = (lane: number) => colors[lane % colors.length];

@@ -60,6 +60,8 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 
 The history chunk size and server request maximum share `HISTORY_CHUNK_SIZE` in [src/repository/limits.ts](src/repository/limits.ts). Change that constant to tune both together. Timeout durations and scroll distances are unrelated settings.
 
+The graph keeps its lane layout while sizing its display to visible rows and overscan, including passing connections. Its width is capped at 35% of the log pane or 180 px, whichever is smaller; expansion starts immediately and shrinking is delayed briefly to avoid jitter. Width changes animate gently over 160 ms unless reduced motion is enabled. Dense sections show a shared horizontal graph scrollbar above the list (also operable with Left/Right and Home/End), leaving commit text stationary. Rows stay 100 px tall: subjects use up to two lines, author/date stays on one line, and references show the first label plus a `+N` count. Hover truncated text or labels for the full values; selecting a commit opens its full details.
+
 Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 
 ### Keyboard navigation

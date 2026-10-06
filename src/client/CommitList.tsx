@@ -1,6 +1,7 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { layoutCommitGraph, type CommitGraph as GraphLayout } from "./graph";
-import { CommitGraph, graphWidth } from "./CommitGraph";
+import { CommitGraph } from "./CommitGraph";
+import { commitRowHeight, graphWidth, graphViewportWidth, graphScrollOffset, visibleGraphLanes } from "./graphViewport";
 import { shouldLoadHistory } from "./history";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CommitSummary } from "../repository/types";
@@ -34,10 +35,39 @@ export const CommitList = forwardRef<CommitListHandle, {
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 84,
+    estimateSize: () => commitRowHeight,
     getItemKey: index => commits[index]!.id,
     overscan: 8,
   });
+  const items = virtualizer.getVirtualItems();
+  const visibleLanes = visibleGraphLanes(graph.rows, items.map(item => item.index));
+  const [retainedLanes, setRetainedLanes] = useState(visibleLanes);
+  const lanes = Math.max(visibleLanes, retainedLanes);
+  useEffect(() => {
+    if (visibleLanes >= retainedLanes) { setRetainedLanes(visibleLanes); return; }
+    const timer = setTimeout(() => setRetainedLanes(visibleLanes), 250);
+    return () => clearTimeout(timer);
+  }, [visibleLanes, retainedLanes]);
+  const [paneWidth, setPaneWidth] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const graphScrollRef = useRef<HTMLDivElement>(null);
+  const viewportWidth = graphViewportWidth(lanes, paneWidth);
+  const contentWidth = graphWidth(lanes);
+  const offset = graphScrollOffset(scrollOffset, contentWidth, viewportWidth);
+  const overflowing = contentWidth > viewportWidth;
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const measure = () => setPaneWidth(element.clientWidth);
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    if (graphScrollRef.current) graphScrollRef.current.scrollLeft = offset;
+    if (offset !== scrollOffset) setScrollOffset(offset);
+  }, [offset, scrollOffset]);
   const focusPending = () => {
     if (pendingFocus.current === null) return;
     const button = scrollRef.current?.querySelector<HTMLButtonElement>(`button[data-commit-index="${pendingFocus.current}"]`);
@@ -71,24 +101,44 @@ export const CommitList = forwardRef<CommitListHandle, {
     check();
     return () => { element.removeEventListener("scroll", check); observer.disconnect(); };
   }, [canLoadMore, onLoadMore, commits.length]);
-  return <div className="commit-scroll" ref={scrollRef}>
+  return <div className="commit-list" style={{ "--graph-viewport-width": `${viewportWidth}px`, "--graph-offset": `${-offset}px` } as CSSProperties}>
+    {overflowing && <div className="graph-overflow-bar">
+      <div ref={graphScrollRef} className="graph-horizontal-scroll" tabIndex={0} role="region"
+        aria-label="Scroll commit graph horizontally" title="Scroll to see hidden graph lanes"
+        onScroll={event => setScrollOffset(event.currentTarget.scrollLeft)}
+        onKeyDown={event => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setScrollOffset(event.key === "Home" ? 0 : event.key === "End" ? contentWidth - viewportWidth
+            : graphScrollOffset(offset + (event.key === "ArrowLeft" ? -32 : 32), contentWidth, viewportWidth));
+        }}>
+        <div style={{ width: contentWidth, height: 1 }} />
+      </div>
+      <span className="graph-overflow-hint">↔ More graph lanes</span>
+    </div>}
+    <div className="commit-scroll" ref={scrollRef}>
     <ol className="commits" aria-label="Commits" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-      {virtualizer.getVirtualItems().map(item => {
+      {items.map(item => {
         const commit = commits[item.index]!;
-        return <li key={item.key} data-index={item.index} ref={virtualizer.measureElement}
+        const metadata = `${commit.shortId} · ${commit.author.name} · ${formatDate(commit.author.date)}`;
+        return <li key={item.key} data-index={item.index}
           aria-posinset={item.index + 1} aria-setsize={commits.length}
           style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${item.start}px)` }}>
           <button data-commit-index={item.index} aria-pressed={selected === commit.id}
-            style={{ paddingLeft: graphWidth(graph.width) + 8 }}
             onFocus={() => onSelect(commit.id)} onClick={() => onSelect(commit.id)}>
-            <CommitGraph row={graph.rows[item.index]!} width={graph.width} />
+            <span className="commit-graph-window"><CommitGraph row={graph.rows[item.index]!} width={lanes} /></span>
             {commit.parents.length === 0 && <span className="sr-only">Root commit. </span>}
-            <strong>{commit.subject || "(No subject)"}</strong>
-            <span><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date} title={commit.author.date}>{formatDate(commit.author.date)}</time></span>
-            {commit.references.length > 0 && <span className="labels">{commit.references.map(reference => <span className="ref-label" key={reference}>{reference.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>)}</span>}
+            <strong title={commit.subject || "(No subject)"}>{commit.subject || "(No subject)"}</strong>
+            <span className="commit-metadata" title={metadata}><code>{commit.shortId}</code> · {commit.author.name} · <time dateTime={commit.author.date}>{formatDate(commit.author.date)}</time></span>
+            {commit.references.length > 0 && <span className="labels" title={commit.references.join("\n")}>
+              <span className="ref-label">{commit.references[0]!.replace(/^refs\/(heads|remotes|tags)\//, "")}</span>
+              {commit.references.length > 1 && <span className="ref-overflow">+{commit.references.length - 1}</span>}
+            </span>}
           </button>
         </li>;
       })}
     </ol>
+    </div>
   </div>;
 });

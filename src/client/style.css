@@ -70,8 +70,13 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .diff-content { min-height: 0; flex: 1; overflow: auto; }
 .files-panel { background: #25262a; }
 .history-panel { border-right: 1px solid var(--border); background: #25262a; display: flex; flex-direction: column; overflow: hidden; }
-.history-panel > :not(.commit-scroll) { flex-shrink: 0; }
-.commit-scroll { flex: 1; min-height: 0; overflow: auto; overflow-anchor: none; }
+.history-panel > :not(.commit-list) { flex-shrink: 0; }
+.commit-list { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.commit-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overflow-anchor: none; }
+.graph-overflow-bar { display: flex; align-items: center; gap: 8px; min-height: 22px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.graph-horizontal-scroll { width: var(--graph-viewport-width); flex-shrink: 0; overflow-x: scroll; overflow-y: hidden; scrollbar-color: #737985 #25262a; }
+.graph-horizontal-scroll:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.graph-overflow-hint { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; min-height: 41px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .panel-heading > code, .count { font-size: 11px; color: var(--muted); }
 .history-toolbar { padding: 12px 16px 8px; display: flex; align-items: center; gap: 10px; }
@@ -81,20 +86,24 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .history-panel > p, .history-panel > .failure { margin: 8px 16px 12px; }
 .history-panel > button { margin: 12px 16px; }
 .commits, .files { list-style: none; padding: 0; margin: 0; }
-.commits button { position: relative; width: 100%; text-align: left; border: 0; border-radius: 0; padding: 12px 16px 12px 34px; background: transparent; border-bottom: 1px solid #303237; }
-.commit-graph { position: absolute; top: 0; left: 0; bottom: 0; pointer-events: none; overflow: hidden; }
+.commits button { position: relative; width: 100%; height: 100px; overflow: hidden; text-align: left; border: 0; border-radius: 0; padding: 12px 16px 10px calc(var(--graph-viewport-width) + 8px); background: transparent; border-bottom: 1px solid #303237; }
+.commits button .commit-graph-window { position: absolute; inset: 0 auto 0 0; width: var(--graph-viewport-width); margin: 0; overflow: hidden; pointer-events: none; }
+.commit-graph { position: absolute; top: 0; left: 0; bottom: 0; transform: translateX(var(--graph-offset)); pointer-events: none; overflow: hidden; }
 .commit-graph path { fill: none; stroke-width: 2; }
 .commit-graph circle { fill: #25262a; stroke-width: 2; }
 .commits button[aria-pressed="true"] .commit-graph circle { fill: #2e436e; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.commits button strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
-.commits button > span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+.commits button strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; height: 36px; line-height: 18px; overflow: hidden; font-weight: 500; overflow-wrap: anywhere; }
+.commits button > span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.commit-metadata { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .commits button code { color: #9eb3e8; }
 .commits button:hover, .files button:hover { background: #303238; }
 .commits button[aria-pressed="true"], .files button[aria-pressed="true"] { background: #2e436e; box-shadow: inset 3px 0 #789cff; }
 .commits button:focus, .files button:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
 .diff-content:focus { outline: none; }
-.commits button .labels { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.commits button .labels { display: flex; flex-wrap: nowrap; gap: 5px; margin-top: 4px; overflow: hidden; white-space: nowrap; }
+.commits .ref-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ref-overflow { flex-shrink: 0; }
 .ref-label { color: #b9c5ef; background: #35405c; border: 1px solid #485779; border-radius: 3px; padding: 0 5px; }
 .commit-summary { padding: 18px; }
 .commit-summary h3 { font-size: 16px; margin-bottom: 10px; }
@@ -172,4 +181,6 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 }
 @media (prefers-reduced-motion: no-preference) {
   button { transition: background-color 100ms ease; }
+  .commits button { transition: background-color 100ms ease, padding-left 160ms ease-out; }
+  .commits button .commit-graph-window, .graph-horizontal-scroll { transition: width 160ms ease-out; }
 }
