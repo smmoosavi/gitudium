@@ -50,7 +50,7 @@ export class GitRepositoryReader implements RepositoryReader {
     return new GitRepositoryReader(root);
   }
 
-  private async run(args: string[], signal?: AbortSignal, limit = MAX_OUTPUT): Promise<string> {
+  private async run(args: string[], signal?: AbortSignal, limit = MAX_OUTPUT, input?: string): Promise<string> {
     if (signal?.aborted) throw new RepositoryError("CANCELLED", "Git operation cancelled.");
     if (this.active >= 4) throw new RepositoryError("BUSY", "Too many concurrent Git operations; retry later.");
     this.active++;
@@ -66,7 +66,7 @@ export class GitRepositoryReader implements RepositoryReader {
             ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
             GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C",
           },
-          stdin: "ignore", stdout: "pipe", stderr: "pipe",
+          stdin: input === undefined ? "ignore" : Buffer.from(input), stdout: "pipe", stderr: "pipe",
         });
       } catch {
         throw new RepositoryError("GIT_UNAVAILABLE", "Unable to start Git; check Git installation and launch directory.");
@@ -196,11 +196,15 @@ export class GitRepositoryReader implements RepositoryReader {
       const output = await this.run(["rev-parse", "--all"], signal);
       const ids = output.trim() ? output.trim().split("\n") : [];
       tips = [];
-      for (const id of [...new Set(ids)]) {
-        try { tips.push(await this.resolve(id, signal)); } catch (error) {
-          if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
+      const uniqueIds = [...new Set(ids)];
+      if (uniqueIds.length) {
+        const peeled = await this.run(["cat-file", "--batch-check=%(objectname) %(objecttype)"], signal, MAX_OUTPUT,
+          uniqueIds.map(id => `${id}^{}`).join("\n") + "\n");
+        for (const line of peeled.trim().split("\n")) {
+          const [id, type] = line.split(" ");
+          if (type === "commit") tips.push(id);
+          if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
         }
-        if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
       }
       try { tips.push(await this.resolve("HEAD", signal)); } catch (error) {
         if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;

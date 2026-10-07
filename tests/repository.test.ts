@@ -233,3 +233,65 @@ test("validates unsafe inputs and normalizes failed commands and cancellation", 
   await rm(join(path, ".git"), { recursive: true });
   await expect(reader.references()).rejects.toMatchObject({ code: "GIT_FAILED" });
 });
+
+test("bulk history peeling matches individual resolution for mixed and nested refs", async () => {
+  const path = await fixture();
+  const root = await commit(path, "file", "root", "root");
+  const blob = await git(path, "rev-parse", "HEAD:file");
+  const tree = await git(path, "rev-parse", "HEAD^{tree}");
+  await git(path, "tag", "-a", "inner", "-m", "inner", root);
+  await git(path, "tag", "-a", "outer", "-m", "outer", "inner");
+  await git(path, "tag", "-a", "blob-tag", "-m", "blob", blob);
+  await git(path, "tag", "tree-tag", tree);
+  await git(path, "update-ref", "refs/custom/blob", blob);
+  await git(path, "update-ref", "refs/custom/tree", tree);
+  const custom = await git(path, "commit-tree", tree, "-p", root, "-m", "custom only");
+  await git(path, "update-ref", "refs/custom/nested", custom);
+  const detached = await git(path, "commit-tree", tree, "-p", root, "-m", "detached only");
+  await git(path, "checkout", "--detach", detached);
+  const ids = [...new Set((await git(path, "rev-parse", "--all")).split("\n"))];
+  const tips: string[] = [];
+  for (const id of ids) {
+    try { tips.push(await git(path, "rev-parse", "--verify", "--end-of-options", `${id}^{commit}`)); } catch { /* Non-commit objects are excluded. */ }
+  }
+  tips.push(detached);
+  const expected = (await git(path, "log", "--topo-order", "--format=%H", ...[...new Set(tips)].sort(), "--")).split("\n");
+  const reader = await GitRepositoryReader.discover(path);
+  const internal = reader as unknown as { run: (...args: [string[], AbortSignal?, number?, string?]) => Promise<string> };
+  const run = internal.run.bind(reader);
+  const commands: string[] = [];
+  internal.run = (...args) => { commands.push(args[0][0]); return run(...args); };
+  const page = await reader.history({ limit: 200 });
+  expect(commands).toEqual(["rev-parse", "cat-file", "rev-parse", "for-each-ref", "log"]);
+  expect(page.commits.map(item => item.id)).toEqual(expected);
+  expect(page.commits.map(item => item.id).sort()).toEqual([root, custom, detached].sort());
+  const references = await reader.references();
+  expect(page.commits.find(item => item.id === root)?.references).toEqual(references.filter(ref => ref.commitId === root).map(ref => ref.name));
+  expect((await reader.commit(root)).references).toEqual(page.commits.find(item => item.id === root)!.references);
+  expect(references.filter(ref => ref.name === "refs/tags/blob-tag" || ref.name === "refs/tags/tree-tag").every(ref => ref.commitId === null)).toBe(true);
+  expect(page.nextCursor).toBeNull();
+});
+
+test("history bulk peeling retains the tip limit before deduplicating peeled aliases", async () => {
+  const reader = await GitRepositoryReader.discover(await fixture());
+  const id = "a".repeat(40);
+  let calls = 0;
+  Object.defineProperty(reader, "run", { value: async (args: string[], _signal: AbortSignal, _limit: number, input: string) => {
+    calls++;
+    if (args[0] === "rev-parse") return Array.from({ length: 4097 }, (_, index) => index.toString(16).padStart(40, "0")).join("\n");
+    expect(args).toEqual(["cat-file", "--batch-check=%(objectname) %(objecttype)"]);
+    expect(input.trim().split("\n")).toHaveLength(4097);
+    return Array.from({ length: 4097 }, () => `${id} commit`).join("\n") + "\n";
+  } });
+  await expect(reader.history()).rejects.toMatchObject({ code: "OUTPUT_LIMIT", message: "Too many history tips." });
+  expect(calls).toBe(2);
+});
+
+test("non-commit refs with unborn HEAD produce empty history", async () => {
+  const path = await fixture();
+  const tree = await git(path, "mktree");
+  await git(path, "update-ref", "refs/custom/tree", tree);
+  await git(path, "tag", "-a", "tree-tag", "-m", "tree", tree);
+  const reader = await GitRepositoryReader.discover(path);
+  expect(await reader.history()).toEqual({ commits: [], nextCursor: null });
+});

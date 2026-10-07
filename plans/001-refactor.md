@@ -165,9 +165,15 @@ Mounted Strict Mode browser checks on an isolated fixture passed: empty-commit `
 - [x] Benchmark this isolated change before proceeding.
 
 Reference-index milestone: history and commit details build an ordered, request-local commit-ID/name map; no persistent decoration cache. Targeted repository/API/history tests and typecheck passed. Seven-sample measurements on Bun 1.4.0 / Git 2.43.0, using the phase 0 measurement script, yielded initial/repeated/subsequent medians (ms): 32 custom refs baseline 91.083/90.811/18.649 → index 88.233/91.195/18.456; 160 refs 356.889/355.920/24.372 → 344.057/345.693/24.627; 512 refs 1094.649/1078.591/39.525 → 1054.342/1071.131/40.060. Custom refs are not displayed decorations, so these measurements principally confirm the remaining per-tip subprocess cost rather than establish an indexing speedup. No timing thresholds were added.
-- [ ] Investigate bulk tip resolution/peeling to reduce one-process-per-tip overhead. Adopt only an approach verified against current Git compatibility and fixtures.
-- [ ] Preserve filtering of non-commit targets, custom refs, detached HEAD, deduplication, tip limits, deterministic ordering, and snapshot pagination.
-- [ ] Do not add a long-lived ref/history cache, change history chunk size, or impose a new retention cap as part of this phase.
+- [x] Investigate bulk tip resolution/peeling to reduce one-process-per-tip overhead. Adopt only an approach verified against current Git compatibility and fixtures.
+- [x] Preserve filtering of non-commit targets, custom refs, detached HEAD, deduplication, tip limits, deterministic ordering, and snapshot pagination.
+- [x] Do not add a long-lived ref/history cache, change history chunk size, or impose a new retention cap as part of this phase.
+
+Bulk milestone: keep the captured `rev-parse --all` object IDs and peel each unique ID through one `cat-file --batch-check=%(objectname) %(objecttype)` process, using `^{}` to recursively peel tags without treating blob/tree targets as command failures. Keep only commit results; retain the existing pre-deduplication tip-limit check, separately resolve HEAD, then deduplicate/sort exactly as before. Revision-specific requests and snapshot cursor handling remain unchanged. The internal runner only gains optional buffered stdin for this command; execution flags, output caps, cancellation, concurrency and cleanup remain unchanged. No runner/parser extraction was included.
+
+Git 2.43.0 probes verified nested annotated tags, annotated/lightweight non-commit targets, and unborn HEAD. Bulk `rev-parse --revs-only` stopped on a non-commit target, so it was rejected. Batch cat-file preserves one result per captured input. Integration tests compare history with the original individual-resolution algorithm across mixed custom/standard refs and detached HEAD; verify decoration order and commit-detail agreement, non-commit-only empty history, and pre-deduplication tip-limit behavior. A traced reader request asserts exactly five commands (`rev-parse`, `cat-file`, HEAD `rev-parse`, `for-each-ref`, `log`) regardless of tip count. Existing pagination, custom-tip membership, worktree/bare, snapshot eviction and cancellation fixtures pass.
+
+Same seven-sample fixture medians after bulk peeling (initial/repeated/subsequent ms): 32 custom refs 27.426/26.504/18.131; 160 refs 39.849/38.863/23.135; 512 refs 74.962/75.009/39.416. Versus the indexed milestone, initial-page medians improve approximately 3.2×/8.6×/14.1×. First-page process count falls from one resolver per distinct captured object plus four fixed commands to five total; cursor pages still use the same two commands. Measurements exclude discovery/HTTP, are not cold filesystem cache measurements, and add no flaky timing threshold. Final validation: 99 tests, `pnpm typecheck`, `pnpm build`, and rebuilt-artifact `pnpm test:artifact` passed.
 
 **Validation:** `pnpm test tests/repository.test.ts tests/viewer-api.test.ts tests/history-client.test.ts`, `pnpm typecheck`, and comparable before/after measurements.
 
@@ -230,6 +236,6 @@ Use pnpm for project scripts and package management. Install dependencies only a
 | 1 — SSE delivery                  | Complete | Regression failed before fix (SSE timeout), then passed; 16 targeted tests and 92 full-suite tests passed; typecheck, build and rebuilt-artifact smoke passed. |
 | 2 — Component/hooks extraction    | Complete | Rendering and hooks in separate commits; 94 tests passed; typecheck, build, rebuilt-artifact smoke and mounted browser checks passed (see record above). |
 | 3 — Keyboard coordination         | Complete | One global listener with explicit pane adapters; 96 tests, typecheck, build, artifact smoke and mounted Strict Mode browser checks passed. |
-| 4 — History work reduction        | Not started | —                                                       |
+| 4 — History work reduction        | Complete | Separate reference-index/bulk-peeling milestones; initial history medians improve 3.2×–14.1×; 99 tests, typecheck, build and artifact smoke passed. |
 | 5 — Git parsing/runner boundaries | Not started | —                                                       |
 | 6 — Small shared utilities        | Not started | —                                                       |
