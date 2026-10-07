@@ -1,52 +1,25 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type CommitListHandle } from "./CommitList";
-import { nextHistoryCursor } from "./history";
-import { HISTORY_CHUNK_SIZE } from "../repository/limits";
-import { createLiveRefresh } from "./live";
-import { connectEvents } from "./access";
+import { StrictMode, useEffect, useRef, useState } from "react";
+import type { CommitListHandle } from "./CommitList";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import type { HistoryCursor } from "../repository/types";
-import { defaultLayout, readLayout, writeLayout } from "./layout";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { defaultLayout } from "./layout";
 import { ViewToggle, layoutOptions } from "./ViewToggle";
-import { readFilesMode, writeFilesMode, type FilesMode } from "./files";
 import { ResizeHandle } from "./ResizeHandle";
-import { readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, type DiffMode } from "./diff";
 import { ignoresNavigation, navigationAction, navigationKey, parentNavigationAction, type FocusedPane } from "./navigation";
-import { api, token } from "./api";
+import { token } from "./api";
 import { Failure } from "./Failure";
 import { CommitView } from "./CommitView";
 import { HistoryPane } from "./HistoryPane";
+import { useRepositoryQueries } from "./useRepositoryQueries";
+import { useLiveConnection } from "./useLiveConnection";
+import { useViewerPreferences } from "./useViewerPreferences";
 import "./style.css";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
 
 function App() {
-  const [wrap, setWrap] = useState(() => {
-    try { return readDiffWrap(window.localStorage); } catch { return false; }
-  });
-  useEffect(() => {
-    try { writeDiffWrap(window.localStorage, wrap); } catch { /* Storage access can be blocked. */ }
-  }, [wrap]);
-  const [filesMode, setFilesMode] = useState<FilesMode>(() => {
-    try { return readFilesMode(window.localStorage); } catch { return "list"; }
-  });
-  useEffect(() => {
-    try { writeFilesMode(window.localStorage, filesMode); } catch { /* Storage access can be blocked. */ }
-  }, [filesMode]);
-  const [diffMode, setDiffMode] = useState<DiffMode>(() => {
-    try { return readDiffMode(window.localStorage); } catch { return "unified"; }
-  });
-  useEffect(() => {
-    try { writeDiffMode(window.localStorage, diffMode); } catch { /* Storage access can be blocked. */ }
-  }, [diffMode]);
+  const { wrap, setWrap, filesMode, setFilesMode, diffMode, setDiffMode, layout, setLayout } = useViewerPreferences();
   const viewerRef = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = useState(() => {
-    try { return readLayout(window.localStorage); } catch { return defaultLayout(); }
-  });
-  useEffect(() => {
-    try { writeLayout(window.localStorage, layout); } catch { /* Storage access can be blocked. */ }
-  }, [layout]);
   const { mode } = layout;
   const sizes = layout.sizes[mode];
   const resize = (axis: "primary" | "secondary", value: number) => setLayout(current => ({
@@ -61,21 +34,8 @@ function App() {
   const [focusedPane, setFocusedPane] = useState<FocusedPane>("commits");
   const historyRef = useRef<HTMLElement>(null);
   const commitListRef = useRef<CommitListHandle>(null);
-  const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
-  useEffect(() => {
-    const refresh = createLiveRefresh(queryClient);
-    const close = connectEvents(token!, () => { void refresh.refresh(); }, setConnection);
-    return () => { close(); refresh.close(); };
-  }, []);
-  const metadata = useQuery({ queryKey: ["metadata"], queryFn: ({ signal }) => api.metadata.query(undefined, { signal }), retry: false });
-  const references = useQuery({ queryKey: ["references"], enabled: metadata.isSuccess, queryFn: ({ signal }) => api.references.query(undefined, { signal }), retry: false });
-  const history = useInfiniteQuery({
-    queryKey: ["history", revision], enabled: metadata.isSuccess && references.isSuccess, initialPageParam: undefined as HistoryCursor | undefined,
-    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: HISTORY_CHUNK_SIZE, cursor: pageParam }, { signal }),
-    getNextPageParam: nextHistoryCursor, retry: false,
-  });
-  const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);
-  const loadMoreHistory = useCallback(() => { void history.fetchNextPage(); }, [history.fetchNextPage]);
+  const connection = useLiveConnection(token!);
+  const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = navigationKey(event.key);

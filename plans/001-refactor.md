@@ -122,10 +122,16 @@ Regression evidence: before the fix, the controlled test consumed version 1, que
 - [x] Extract the history pane's rendering behind explicit props; leave state ownership unchanged initially.
 
 Rendering milestone: extracted [CommitView](../src/client/CommitView.tsx), [HistoryPane](../src/client/HistoryPane.tsx), and [Failure](../src/client/Failure.tsx). The existing authenticated API singleton moved to [api](../src/client/api.ts) so detail queries use the same client without importing the entry point. App still owns selection/focus/filter state, commit-keyed lifecycle, queries, live setup and preferences. `pnpm typecheck` and 34 relevant client tests passed.
-- [ ] In a separate commit, introduce a repository-query hook preserving query keys, dependency gates, cancellation signals, and pagination options.
-- [ ] Extract live-connection setup/cleanup into a focused hook without changing refresh ordering in [live refresh](../src/client/live.ts).
-- [ ] Extract preference state/persistence into focused hooks, preserving the existing storage helpers and access guards. Do not introduce a generic settings framework.
-- [ ] Keep selection/focus state in a clear shared owner; do not introduce global state or context solely to shorten prop lists.
+- [x] In a separate commit, introduce a repository-query hook preserving query keys, dependency gates, cancellation signals, and pagination options.
+- [x] Extract live-connection setup/cleanup into a focused hook without changing refresh ordering in [live refresh](../src/client/live.ts).
+- [x] Extract preference state/persistence into focused hooks, preserving the existing storage helpers and access guards. Do not introduce a generic settings framework.
+- [x] Keep selection/focus state in a clear shared owner; do not introduce global state or context solely to shorten prop lists.
+
+Hook milestone: [useRepositoryQueries](../src/client/useRepositoryQueries.ts) preserves query keys, signals, gates, cursor/revision handling, retry settings and history flattening/pagination. [useLiveConnection](../src/client/useLiveConnection.ts) uses the existing QueryClient provider and retains refresh/connection cleanup order, with explicit client/token dependencies. [useViewerPreferences](../src/client/useViewerPreferences.ts) retains each preference's initialization, persistence effect, storage helpers and blocked-storage guards. App continues to own selection/focus/filter and layout sizing; CommitView retains file state, immutable detail/diff queries and local DOM refs. Keyboard listeners are deliberately unchanged pending phase 3.
+
+Integrated-browser rerun on the phase 0 fixture (Strict Mode, isolated ports): empty-commit focus gate; file retention across list/tree and all layouts; commit-keyed reset to beta; commits/files/diff focus transfer; file-parent `n` retention; End/Home/PageDown scrolling (15784/0/694 px); Shift+j exclusion; 25 paced moves to off-screen `empty 180` with 23 mounted buttons and correct DOM focus; pagination through root; tree/split/wrap persistence on reload; loading repository gate; injected metadata failure and successful Retry all passed. An external commit plus new `refresh-probe` branch appeared via live reference refresh while `two files`, alpha and the `files` filter remained selected. A delayed-routing run observed loading but timed out awaiting history; removing the browser route and reloading restored history, then explicit failure/retry checks passed. Browser routes and temporary viewer processes/fixture were cleaned up. No new dependencies were needed.
+
+Added [history-pane tests](../tests/history-pane.test.tsx) for independent loading/error/retry/empty/pagination rendering, unavailable selected filters, exclusion of non-commit refs, and focus styling. Final validation: `pnpm typecheck`, 94 full-suite tests, `pnpm build`, and rebuilt-artifact `pnpm test:artifact` passed.
 
 **Validation:** relevant client-helper tests, `pnpm typecheck`, and the mounted/browser checklist from phase 0.
 
@@ -214,7 +220,7 @@ Use pnpm for project scripts and package management. Install dependencies only a
 | --------------------------------- | ----------- | ------------------------------------------------------- |
 | 0 — Safeguards                    | Complete | Baseline: 87 tests; final: 91 tests, 0 failures; typecheck, build and rebuilt-artifact smoke passed. Integrated-browser checklist and reader/graph measurements recorded above. |
 | 1 — SSE delivery                  | Complete | Regression failed before fix (SSE timeout), then passed; 16 targeted tests and 92 full-suite tests passed; typecheck, build and rebuilt-artifact smoke passed. |
-| 2 — Component/hooks extraction    | Not started | —                                                       |
+| 2 — Component/hooks extraction    | Complete | Rendering and hooks in separate commits; 94 tests passed; typecheck, build, rebuilt-artifact smoke and mounted browser checks passed (see record above). |
 | 3 — Keyboard coordination         | Not started | —                                                       |
 | 4 — History work reduction        | Not started | —                                                       |
 | 5 — Git parsing/runner boundaries | Not started | —                                                       |
