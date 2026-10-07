@@ -68,6 +68,78 @@ async function connect(value: ReturnType<typeof handler>, signal?: AbortSignal) 
   return { stream, next, event };
 }
 
+async function controlledConsumer() {
+  const path = await fixture();
+  let hint: (() => void) | undefined;
+  let closed = 0;
+  const factory = ((_path: unknown, _options: unknown, callback: () => void) => {
+    hint = callback;
+    return { on() { return this; }, close() { closed++; } } as unknown as FSWatcher;
+  }) as unknown as typeof watch;
+  const value = handler(path, { watch: factory, debounceMs: 1, reconcileMs: 60_000 });
+  const slow = await connect(value);
+  const observer = await connect(value);
+  let version = 0;
+  const change = async () => {
+    await git(path, "update-ref", `refs/custom/slow-${++version}`, "HEAD");
+    hint!();
+    // A second consuming stream acknowledges reconciliation, avoiding timing sleeps.
+    expect(await observer.event()).toEqual({ reason: "changed", version });
+  };
+  return { value, slow, observer, change, closed: () => closed };
+}
+
+test("slow SSE consumers retain one queued event and expose skipped versions under backpressure", async () => {
+  const { slow, observer, change } = await controlledConsumer();
+  await change();
+  for (let i = 0; i < 8; i++) await change();
+  expect(await slow.event()).toEqual({ reason: "changed", version: 1 });
+  // Characterize today's loss, not the phase 1 delivery contract: the next
+  // read stays pending until another change, then jumps directly to version 10.
+  const next = slow.event();
+  await change();
+  expect(await next).toEqual({ reason: "changed", version: 10 });
+  await slow.stream.cancel();
+  await observer.stream.cancel();
+});
+
+test("cancelling a slow consumer with queued data leaves other consumers live", async () => {
+  const { slow, observer, change } = await controlledConsumer();
+  await change();
+  await change();
+  await slow.stream.cancel();
+  expect(await slow.next()).toMatchObject({ done: true });
+  await change();
+  await observer.stream.cancel();
+});
+
+test("shutdown with queued SSE data drains the queue and closes resources once", async () => {
+  const { value, slow, observer, change, closed } = await controlledConsumer();
+  await change();
+  await change();
+  value.close();
+  value.close();
+  expect(await slow.event()).toEqual({ reason: "changed", version: 1 });
+  expect(await slow.next()).toMatchObject({ done: true });
+  expect(await observer.next()).toMatchObject({ done: true });
+  expect(closed()).toBe(1);
+  expect((await value(new Request("http://localhost/api/events"))).status).toBe(503);
+});
+
+test("abort with queued SSE data drains once and detaches the consumer", async () => {
+  const { value, observer, change } = await controlledConsumer();
+  const abort = new AbortController();
+  const connection = await connect(value, abort.signal);
+  await change();
+  await change();
+  abort.abort();
+  abort.abort();
+  expect(await connection.event()).toEqual({ reason: "changed", version: 1 });
+  expect(await connection.next()).toMatchObject({ done: true });
+  await change();
+  await observer.stream.cancel();
+});
+
 for (const watchers of [true, false]) {
   test(`external commits, branch switches, loose/custom/packed ref updates (${watchers ? "watchers" : "polling"})`, async () => {
     const path = await fixture();

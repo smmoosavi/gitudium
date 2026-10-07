@@ -6,7 +6,7 @@ Improve maintainability and reliability without changing the read-only viewer's 
 
 This plan follows a source review of the client, repository reader, live-refresh flow, and HTTP/API layer. The review baseline passed `pnpm typecheck` and `pnpm test` (80 tests, 0 failures). Re-establish the baseline before implementation; it is not a guarantee for future changes.
 
-No implementation changes are included in this plan.
+Phase 0 adds safeguards and measurements only; production behavior is unchanged.
 
 ## Priority and execution order
 
@@ -38,12 +38,59 @@ SSE reliability is a behavioral fix and must remain separate from mechanical ref
 
 ## Phase 0 — Establish safeguards
 
-- [ ] Run `pnpm typecheck` and `pnpm test`; record the baseline.
-- [ ] Extend [monitor tests](../tests/monitor.test.ts) with controlled slow-consumer/backpressure cases, cancellation with pending data, and shutdown with pending data.
-- [ ] Characterize mounted UI behavior: commit changes, file selection, layout/file-mode changes, live refresh, loading/error states, and retry.
-- [ ] Characterize keyboard focus and scrolling across commits, files, and diff, including virtualized/off-screen commit selection and empty commits.
-- [ ] Reuse current test tools where sufficient. Use the integrated browser for interaction checks. Add browser-testing dependencies only if repeatable mounted interaction coverage requires them, documenting the choice first.
-- [ ] Measure initial and subsequent history-request latency on controlled many-ref fixtures, and graph computation time at multiple history sizes. Keep fixture creation outside timed regions.
+- [x] Run `pnpm typecheck` and `pnpm test`; record the baseline.
+- [x] Extend [monitor tests](../tests/monitor.test.ts) with controlled slow-consumer/backpressure cases, cancellation with pending data, and shutdown with pending data.
+- [x] Characterize mounted UI behavior: commit changes, file selection, layout/file-mode changes, live refresh, loading/error states, and retry.
+- [x] Characterize keyboard focus and scrolling across commits, files, and diff, including virtualized/off-screen commit selection and empty commits.
+- [x] Reuse current test tools where sufficient. Use the integrated browser for interaction checks. Add browser-testing dependencies only if repeatable mounted interaction coverage requires them, documenting the choice first.
+- [x] Measure initial and subsequent history-request latency on controlled many-ref fixtures, and graph computation time at multiple history sizes. Keep fixture creation outside timed regions.
+
+### Phase 0 characterization record
+
+Baseline re-established on 2026-10-08: `pnpm typecheck` passed; `pnpm test` passed (87 tests, 0 failures). Existing Bun tests plus an integrated-browser checklist are sufficient for this phase; no dependencies or production code changes were required. Repeat this checklist before and after phases 2 and 3 rather than treating pure helper tests as mounted coverage.
+
+The new controlled SSE tests use a consuming observer to acknowledge each metadata reconciliation, not sleeps. They demonstrate that a slow stream queues version 1, drops versions 2–9, and resumes at version 10 only after another change. This is an explicit characterization of the existing delivery defect, not desired behavior. Phase 1 must replace that expectation with its final-change delivery regression. Cancellation, abort, and repeated shutdown with queued/dropped events are covered; abort/shutdown currently drain the already queued event before EOF.
+
+#### Reproducible mounted/browser checklist
+
+Use an isolated temporary Git repository: root adds `alpha.txt` (400 numbered lines) and `nested/beta.txt`; `two files` modifies both (replace alpha with 400 `updated N` lines); branch `files` points to this commit; add 205 empty descendants on `main` via `commit-tree` with the unchanged tree. Disable fixture commit signing and set a local fixture identity. Start the viewer against the fixture, never mutate the source checkout. Choose available API/frontend ports without stopping existing services. Open the locally printed token URL in the integrated browser. With a non-default frontend port, Vite's proxy rewrites Host; same-origin GETs worked without changing the access guard.
+
+| Check | Procedure and observed baseline |
+| --- | --- |
+| Empty commit | Select `empty 205`, press `l`: focus stays in commits; “No changed files” and the diff selection hint appear. |
+| File selection and modes | Filter to `refs/heads/files`, select `two files`, select beta, switch list/tree and all three layouts: selected beta and diff path remain unchanged. |
+| Commit-keyed reset | In tree mode select alpha, select root, wait for root details, then return to `two files`: selection resets to tree's first file, `nested/beta.txt`, not alpha. Wait for detail queries between steps. |
+| Pane navigation | Focus the selected commit; `l` focuses selected file; `j`/`k` select adjacent files; `l` focuses Diff content; `h` returns to files and then commits. |
+| Diff scrolling | Select alpha and wait for `+updated 400`; focus Diff content, press End/Home/PageDown: scrollTop was 15784/0/694 pixels respectively (viewport-dependent). |
+| Parent navigation | From files, `n` selects root, reveals its commit row, and keeps focus in files. From diff, `n`/`p` navigate files, not commits. |
+| Virtualized history | Clear reference filter, select first empty commit, move down 25 rows: `empty 180` is selected/revealed with only 23 mounted buttons. An additional paced `j` selects and focuses `empty 179`. |
+| Modifier/control exclusions | Shift+j does not change selection. Focused reference select retains native keyboard handling. Layout buttons retain focus when activated. |
+| Existing rapid-navigation limit | A rapid 25-key burst reached the selected off-screen commit but triggered “Too many concurrent Git operations; retry later” in details. Retry loaded `empty 180`. Do not silently change this baseline as part of extraction. |
+| Live refresh retention | Filter to `files`, select `two files` and alpha; create an external empty commit on main: connection remains live and selected commit, alpha diff, and filter remain. Reload/clear filter: new `live addition` is visible. |
+| Loading gates | Delay `**/api/trpc/**` by 800 ms using browser routing and reload: “Loading repository…” appears before repository data; references/history show their loading gates. Remove the route afterward. |
+| Error/retry | Abort `**/api/trpc/**` in browser routing and reload: alert “Failed to fetch” with Retry. Remove route, press Retry: metadata, references and history recover. The rapid-navigation case also checks commit-detail retry. |
+
+The checklist was run against the development viewer in Strict Mode. No permanent browser-testing dependency was added. Fixture directories and viewer processes are removed after checks.
+
+#### Performance baseline
+
+Run `pnpm exec bun scripts/measure-refactor.ts`. The [measurement script](../scripts/measure-refactor.ts) creates/removes its own temporary repository, fixes fixture identities/dates, and excludes repository discovery, fixture creation and graph input construction from timing. Seven samples per case; history uses 200-row pages, a 600-commit shared chain and distinct custom-ref tips. “Initial” uses a fresh reader (not cold OS caches), “repeated” repeats the first request on that reader, and “subsequent” follows its cursor. These are repository-reader request measurements, excluding HTTP transport/browser work. Graph measurements warm up once and include full layout and append from a half-sized previous layout; synthetic branching inputs include extra parents and feature decorations. Timing is observational, not a flaky test threshold.
+
+Environment: Linux, Bun 1.4.0, Git 2.43.0. Median milliseconds:
+
+| Custom refs / total commits | Initial history | Repeated first page | Subsequent page |
+| --- | ---: | ---: | ---: |
+| 32 / 632 | 80.125 | 78.469 | 17.712 |
+| 160 / 760 | 367.630 | 342.898 | 24.304 |
+| 512 / 1112 | 956.978 | 963.412 | 37.520 |
+
+| Graph rows | Linear full / append | Branching full / append |
+| --- | ---: | ---: |
+| 200 | 0.538 / 0.432 | 0.559 / 0.554 |
+| 1000 | 1.777 / 2.858 | 1.035 / 1.571 |
+| 5000 | 7.899 / 6.645 | 7.245 / 7.806 |
+
+The script prints min/median/max for rerun comparison. Shared-host scheduling, OS caches and GC affect results; compare on the same environment before phase 4 optimization.
 
 **Exit condition:** the behavior touched by each phase is reproducible through automated tests or a recorded browser checklist; optimization work has a baseline measurement.
 
@@ -159,7 +206,7 @@ Use pnpm for project scripts and package management. Install dependencies only a
 
 | Phase                             | Status      | Validation and measurement results                      |
 | --------------------------------- | ----------- | ------------------------------------------------------- |
-| 0 — Safeguards                    | Not started | Review baseline only: typecheck passed; 80 tests passed |
+| 0 — Safeguards                    | Complete | Baseline: 87 tests; final: 91 tests, 0 failures; typecheck, build and rebuilt-artifact smoke passed. Integrated-browser checklist and reader/graph measurements recorded above. |
 | 1 — SSE delivery                  | Not started | —                                                       |
 | 2 — Component/hooks extraction    | Not started | —                                                       |
 | 3 — Keyboard coordination         | Not started | —                                                       |
