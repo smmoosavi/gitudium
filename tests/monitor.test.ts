@@ -89,17 +89,39 @@ async function controlledConsumer() {
   return { value, slow, observer, change, closed: () => closed };
 }
 
-test("slow SSE consumers retain one queued event and expose skipped versions under backpressure", async () => {
+test("slow SSE consumers receive the latest coalesced invalidation without another change", async () => {
   const { slow, observer, change } = await controlledConsumer();
   await change();
-  for (let i = 0; i < 8; i++) await change();
   expect(await slow.event()).toEqual({ reason: "changed", version: 1 });
-  // Characterize today's loss, not the phase 1 delivery contract: the next
-  // read stays pending until another change, then jumps directly to version 10.
+  await change();
+  for (let i = 0; i < 8; i++) await change();
+  expect(await slow.event()).toEqual({ reason: "changed", version: 2 });
+  expect(await slow.event()).toEqual({ reason: "changed", version: 10 });
   const next = slow.event();
   await change();
-  expect(await next).toEqual({ reason: "changed", version: 10 });
+  expect(await next).toEqual({ reason: "changed", version: 11 });
   await slow.stream.cancel();
+  await observer.stream.cancel();
+});
+
+test("backpressure preserves the initial connected event before the latest change", async () => {
+  const { value, observer, change } = await controlledConsumer();
+  const response = await value(new Request("http://localhost/api/events"));
+  const stream = response.body!.getReader();
+  for (let i = 0; i < 8; i++) await change();
+  const decode = (value: Uint8Array | undefined) => JSON.parse(new TextDecoder().decode(value).split("data: ")[1].trim());
+  expect(decode((await stream.read()).value)).toEqual({ reason: "connected", version: 0 });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const latest = await Promise.race([
+      stream.read(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("SSE timeout")), 3000); }),
+    ]);
+    expect(decode(latest.value)).toEqual({ reason: "changed", version: 8 });
+  } finally {
+    clearTimeout(timer);
+    await stream.cancel();
+  }
   await observer.stream.cancel();
 });
 

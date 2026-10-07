@@ -2,7 +2,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { GitRepositoryReader } from "../repository/git";
 import type { RepositoryReader } from "../repository/types";
-import { RepositoryMonitor, type RepositoryMonitorOptions } from "../repository/monitor";
+import { RepositoryMonitor, type RepositoryInvalidation, type RepositoryMonitorOptions } from "../repository/monitor";
 
 export function createRequestHandler(cwd = process.cwd(), suppliedReader?: RepositoryReader, monitorOptions: RepositoryMonitorOptions = {}) {
   let repository: Promise<RepositoryReader> | undefined;
@@ -21,20 +21,28 @@ export function createRequestHandler(cwd = process.cwd(), suppliedReader?: Repos
       return new Response("Repository events unavailable", { status: 503 });
     }
     let cleanup = () => {};
+    let flush = () => {};
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         let unsubscribe = () => {};
         let ended = false;
+        let pending: RepositoryInvalidation | undefined;
+        flush = () => {
+          if (ended || !pending || (controller.desiredSize ?? 0) <= 0) return;
+          const event = pending;
+          pending = undefined;
+          controller.enqueue(encoder.encode(`event: invalidation\ndata: ${JSON.stringify(event)}\n\n`));
+        };
         const finish = () => {
           if (ended) return;
-          ended = true;
-          unsubscribe();
-          request.signal.removeEventListener("abort", finish);
+          cleanup();
           controller.close();
         };
         cleanup = () => {
           if (ended) return;
           ended = true;
+          pending = undefined;
+          flush = () => {};
           unsubscribe();
           request.signal.removeEventListener("abort", finish);
         };
@@ -45,12 +53,14 @@ export function createRequestHandler(cwd = process.cwd(), suppliedReader?: Repos
         }
         unsubscribe = monitor.subscribe(event => {
           if (event === null) finish();
-          else if (!ended && (controller.desiredSize ?? 0) > 0) {
-            // One queued invalidation is enough; slow clients cannot grow memory.
-            controller.enqueue(encoder.encode(`event: invalidation\ndata: ${JSON.stringify(event)}\n\n`));
+          else if (!ended) {
+            // Keep only the latest change beyond the single queued event.
+            pending = event;
+            flush();
           }
         });
       },
+      pull() { flush(); },
       cancel() { cleanup(); },
     });
     return new Response(body, { headers: {

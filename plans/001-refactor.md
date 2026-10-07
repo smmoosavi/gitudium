@@ -98,13 +98,17 @@ The script prints min/median/max for rerun comparison. Shared-host scheduling, O
 
 **Location:** [HTTP handler](../src/server/http.ts), [repository monitor](../src/repository/monitor.ts), and [monitor tests](../tests/monitor.test.ts).
 
-The handler currently discards invalidations when `desiredSize` is not positive. An earlier queued event does not necessarily cover a later repository change if its resulting refresh has already occurred. This is a code-path concern from review, not a reproduced regression yet.
+Phase 0 reproduced discarded invalidations when `desiredSize` was not positive. An earlier queued event does not necessarily cover a later repository change if its resulting refresh has already occurred. Phase 1 now retains the latest pending invalidation and delivers it on consumer demand.
 
-- [ ] Write a regression test where an earlier queued event is consumed, a later event arrives under backpressure, and no further repository changes occur.
-- [ ] Retain at most one pending latest invalidation when the stream cannot accept an event.
-- [ ] Flush pending invalidation on consumer demand through the stream's `pull` lifecycle. Do not create an unbounded queue.
-- [ ] Preserve the initial connected event and monotonic event versions; verify burst coalescing explicitly.
-- [ ] Make abort, cancellation, and shutdown idempotent and clear pending state/listeners.
+- [x] Write a regression test where an earlier queued event is consumed, a later event arrives under backpressure, and no further repository changes occur.
+- [x] Retain at most one pending latest invalidation when the stream cannot accept an event.
+- [x] Flush pending invalidation on consumer demand through the stream's `pull` lifecycle. Do not create an unbounded queue.
+- [x] Preserve the initial connected event and monotonic event versions; verify burst coalescing explicitly.
+- [x] Make abort, cancellation, and shutdown idempotent and clear pending state/listeners.
+
+Implementation: each stream keeps at most one queued event plus one latest pending invalidation. Both monitor delivery and `pull` use the same flush path. Cleanup discards pending state, disables flushing, unsubscribes and removes the abort listener; abort/shutdown still drain already queued data before EOF. No monitor changes were necessary.
+
+Regression evidence: before the fix, the controlled test consumed version 1, queued version 2, produced versions 3–10 under backpressure, then timed out waiting for version 10 with no further changes. After the fix it receives versions 2 and 10, followed by 11 on a new change. A separate test leaves the connected event unread during eight changes and verifies connected version 0 followed only by changed version 8. Existing cancellation/abort/repeated-shutdown tests run with both queued and pending data, checking that pending data is not delivered after termination.
 
 **Validation:** `pnpm test tests/monitor.test.ts tests/client-access.test.ts tests/live-client.test.ts` and `pnpm typecheck`.
 
@@ -207,7 +211,7 @@ Use pnpm for project scripts and package management. Install dependencies only a
 | Phase                             | Status      | Validation and measurement results                      |
 | --------------------------------- | ----------- | ------------------------------------------------------- |
 | 0 — Safeguards                    | Complete | Baseline: 87 tests; final: 91 tests, 0 failures; typecheck, build and rebuilt-artifact smoke passed. Integrated-browser checklist and reader/graph measurements recorded above. |
-| 1 — SSE delivery                  | Not started | —                                                       |
+| 1 — SSE delivery                  | Complete | Regression failed before fix (SSE timeout), then passed; 16 targeted tests and 92 full-suite tests passed; typecheck, build and rebuilt-artifact smoke passed. |
 | 2 — Component/hooks extraction    | Not started | —                                                       |
 | 3 — Keyboard coordination         | Not started | —                                                       |
 | 4 — History work reduction        | Not started | —                                                       |
