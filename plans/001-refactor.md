@@ -118,8 +118,10 @@ Regression evidence: before the fix, the controlled test consumed version 1, que
 
 **Location:** [client entry point](../src/client/main.tsx).
 
-- [ ] Extract `CommitView` into its own component without changing props, queries, effects, or the selected-commit key.
-- [ ] Extract the history pane's rendering behind explicit props; leave state ownership unchanged initially.
+- [x] Extract `CommitView` into its own component without changing props, queries, effects, or the selected-commit key.
+- [x] Extract the history pane's rendering behind explicit props; leave state ownership unchanged initially.
+
+Rendering milestone: extracted [CommitView](../src/client/CommitView.tsx), [HistoryPane](../src/client/HistoryPane.tsx), and [Failure](../src/client/Failure.tsx). The existing authenticated API singleton moved to [api](../src/client/api.ts) so detail queries use the same client without importing the entry point. App still owns selection/focus/filter state, commit-keyed lifecycle, queries, live setup and preferences. `pnpm typecheck` and 34 relevant client tests passed.
 - [ ] In a separate commit, introduce a repository-query hook preserving query keys, dependency gates, cancellation signals, and pagination options.
 - [ ] Extract live-connection setup/cleanup into a focused hook without changing refresh ordering in [live refresh](../src/client/live.ts).
 - [ ] Extract preference state/persistence into focused hooks, preserving the existing storage helpers and access guards. Do not introduce a generic settings framework.
