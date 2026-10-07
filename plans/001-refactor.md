@@ -140,7 +140,7 @@ The handler currently discards invalidations when `desiredSize` is not positive.
 
 1. Start each phase from a clean, understood checkout; preserve unrelated changes.
 2. Add characterization/regression tests first. For a behavioral fix, establish that the new test fails for the intended reason.
-3. Use small commits: tests, mechanical extraction, then behavioral/algorithmic changes. Do not bundle unrelated cleanup.
+3. Creating commits is part of the implementation responsibility. Commit completed, validated work at logical milestones rather than leaving it uncommitted until the entire plan is finished. Prefer small commits, but prioritize self-contained changes: each commit should represent a coherent unit of work and leave the project in a working state. Separate mechanical extraction from behavioral/algorithmic changes where practical, include directly related tests and documentation, and do not bundle unrelated cleanup.
 4. Run the smallest relevant test selection and typecheck after each implementation step. Investigate failures before proceeding.
 5. Before merging, run `pnpm test`, `pnpm typecheck`, `pnpm build`, and `pnpm test:artifact`. Confirm the smoke script exercises the newly built artifact.
 6. Verify the built viewer: all layouts, resize, preferences, reference switching, pagination, file/diff modes, keyboard focus, live updates, reconnect, and error/retry states.
