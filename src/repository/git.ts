@@ -155,10 +155,21 @@ export class GitRepositoryReader implements RepositoryReader {
     });
   }
 
-  private summary(fields: string[], refs: Reference[]): CommitSummary {
+  private referenceNames(refs: Reference[]): Map<string, string[]> {
+    const names = new Map<string, string[]>();
+    for (const ref of refs) {
+      if (ref.commitId === null) continue;
+      const attached = names.get(ref.commitId);
+      if (attached) attached.push(ref.name);
+      else names.set(ref.commitId, [ref.name]);
+    }
+    return names;
+  }
+
+  private summary(fields: string[], refs: Map<string, string[]>): CommitSummary {
     const [id, shortId, parents, subject, name, email, date] = fields;
     return { id, shortId, parents: parents ? parents.split(" ") : [], subject,
-      author: { name, email, date }, references: refs.filter(ref => ref.commitId === id).map(ref => ref.name) };
+      author: { name, email, date }, references: refs.get(id) ?? [] };
   }
 
   async history(query: HistoryQuery = {}, signal?: AbortSignal): Promise<HistoryPage> {
@@ -198,7 +209,7 @@ export class GitRepositoryReader implements RepositoryReader {
       if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
     }
     if (!tips.length) return { commits: [], nextCursor: null };
-    const refs = await this.references(signal);
+    const refs = this.referenceNames(await this.references(signal));
     const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
     const fields = output.split("\0");
     if (fields.at(-1) === "") fields.pop();
@@ -238,7 +249,7 @@ export class GitRepositoryReader implements RepositoryReader {
   async commit(revision: string, signal?: AbortSignal): Promise<CommitDetails> {
     const id = await this.resolve(revision, signal);
     const fields = (await this.run(["log", "-1", "-z", `--format=${DETAILS}`, id, "--"], signal)).split("\0");
-    const summary = this.summary(fields, await this.references(signal));
+    const summary = this.summary(fields, this.referenceNames(await this.references(signal)));
     return { ...summary, committer: { name: fields[7], email: fields[8], date: fields[9] },
       message: fields[10], files: await this.files(id, signal), diffBase: summary.parents[0] ?? null };
   }

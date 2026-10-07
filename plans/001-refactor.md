@@ -161,8 +161,10 @@ Mounted Strict Mode browser checks on an isolated fixture passed: empty-commit `
 
 **Location:** [Git reader](../src/repository/git.ts).
 
-- [ ] Build a per-request map from commit ID to reference names instead of scanning every ref for every summary. Preserve reference order and result shapes.
-- [ ] Benchmark this isolated change before proceeding.
+- [x] Build a per-request map from commit ID to reference names instead of scanning every ref for every summary. Preserve reference order and result shapes.
+- [x] Benchmark this isolated change before proceeding.
+
+Reference-index milestone: history and commit details build an ordered, request-local commit-ID/name map; no persistent decoration cache. Targeted repository/API/history tests and typecheck passed. Seven-sample measurements on Bun 1.4.0 / Git 2.43.0, using the phase 0 measurement script, yielded initial/repeated/subsequent medians (ms): 32 custom refs baseline 91.083/90.811/18.649 → index 88.233/91.195/18.456; 160 refs 356.889/355.920/24.372 → 344.057/345.693/24.627; 512 refs 1094.649/1078.591/39.525 → 1054.342/1071.131/40.060. Custom refs are not displayed decorations, so these measurements principally confirm the remaining per-tip subprocess cost rather than establish an indexing speedup. No timing thresholds were added.
 - [ ] Investigate bulk tip resolution/peeling to reduce one-process-per-tip overhead. Adopt only an approach verified against current Git compatibility and fixtures.
 - [ ] Preserve filtering of non-commit targets, custom refs, detached HEAD, deduplication, tip limits, deterministic ordering, and snapshot pagination.
 - [ ] Do not add a long-lived ref/history cache, change history chunk size, or impose a new retention cap as part of this phase.
