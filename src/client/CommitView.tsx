@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import { Failure } from "./Failure";
@@ -7,7 +7,8 @@ import { ChangedFiles } from "./ChangedFiles";
 import { filePaths, type FilesMode } from "./files";
 import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, type DiffMode } from "./diff";
-import { focusNavigationTarget, ignoresNavigation, navigationAction, navigationKey, type FocusedPane } from "./navigation";
+import { focusNavigationTarget, type FocusedPane } from "./navigation";
+import type { DetailNavigationAdapter } from "./useKeyboardNavigation";
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -16,7 +17,8 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus }: {
+export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef }: {
+  navigationRef: RefObject<DetailNavigationAdapter | null>;
   focusedPane: FocusedPane; onPaneFocus: (pane: FocusedPane) => void;
   wrap: boolean; onWrapChange: (wrap: boolean) => void;
   id: string; diffMode: DiffMode; onDiffModeChange: (mode: DiffMode) => void;
@@ -35,27 +37,26 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
   useEffect(() => {
     if (selectedPath === null && path !== null) setPath(path);
   }, [selectedPath, path]);
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (ignoresNavigation(event) || (focusedPane === "commits" && navigationKey(event.key) !== "l")) return;
-      const action = navigationAction(focusedPane, event.key, paths.length, paths.indexOf(path ?? ""), paths.length);
-      if (!action) return;
-      event.preventDefault();
-      if (action.index !== undefined) setPath(paths[action.index]!);
-      if (action.pane === "diff" && path === null && paths.length) setPath(paths[0]!);
-      const diffContent = diffRef.current;
-      if (diffContent) {
-        if (action.pane === "diff" && action.index !== undefined && paths[action.index] !== path) diffContent.scrollTo({ top: 0 });
-        if (action.scroll !== undefined) diffContent.scrollBy({ top: action.scroll });
-        if (action.page !== undefined) diffContent.scrollBy({ top: action.page * diffContent.clientHeight });
-        if (action.edge !== undefined) diffContent.scrollTo({ top: action.edge === "start" ? 0 : diffContent.scrollHeight });
-      }
-      onPaneFocus(action.pane);
-      focusNavigationTarget(filesRef.current?.parentElement ?? null, action.pane, action.index);
+  useLayoutEffect(() => {
+    navigationRef.current = {
+      count: paths.length,
+      selectedIndex: paths.indexOf(path ?? ""),
+      apply: action => {
+        if (action.index !== undefined) setPath(paths[action.index]!);
+        if (action.pane === "diff" && path === null && paths.length) setPath(paths[0]!);
+        const diffContent = diffRef.current;
+        if (diffContent) {
+          if (action.pane === "diff" && action.index !== undefined && paths[action.index] !== path) diffContent.scrollTo({ top: 0 });
+          if (action.scroll !== undefined) diffContent.scrollBy({ top: action.scroll });
+          if (action.page !== undefined) diffContent.scrollBy({ top: action.page * diffContent.clientHeight });
+          if (action.edge !== undefined) diffContent.scrollTo({ top: action.edge === "start" ? 0 : diffContent.scrollHeight });
+        }
+        onPaneFocus(action.pane);
+        focusNavigationTarget(filesRef.current?.parentElement ?? null, action.pane, action.index);
+      },
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [commit.data, filesMode, focusedPane, onPaneFocus, path]);
+    return () => { navigationRef.current = null; };
+  }, [commit.data, filesMode, focusedPane, onPaneFocus, path, navigationRef]);
   useEffect(() => {
     focusNavigationTarget(filesRef.current?.parentElement ?? null, "files", undefined, focusedPane === "files");
   }, [path, focusedPane, filesMode]);

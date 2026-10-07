@@ -141,11 +141,17 @@ Added [history-pane tests](../tests/history-pane.test.tsx) for independent loadi
 
 **Location:** extracted application/commit components and [navigation helpers](../src/client/navigation.ts).
 
-- [ ] Retain the existing pure action helpers rather than redesigning navigation semantics.
-- [ ] Introduce one coordinating hook owning the global keyboard listener.
-- [ ] Dispatch calculated actions through explicit pane adapters for selection, focus, reveal, and scrolling; keep pane DOM refs local where possible.
-- [ ] Preserve the distinction between moving selection and transferring focus, especially parent-pane `n`/`p` navigation.
-- [ ] Verify listener cleanup, current-state dependencies, and no duplicate handling under Strict Mode.
+- [x] Retain the existing pure action helpers rather than redesigning navigation semantics.
+- [x] Introduce one coordinating hook owning the global keyboard listener.
+- [x] Dispatch calculated actions through explicit pane adapters for selection, focus, reveal, and scrolling; keep pane DOM refs local where possible.
+- [x] Preserve the distinction between moving selection and transferring focus, especially parent-pane `n`/`p` navigation.
+- [x] Verify listener cleanup, current-state dependencies, and no duplicate handling under Strict Mode.
+
+Implementation: [useKeyboardNavigation](../src/client/useKeyboardNavigation.ts) owns the single global listener and dispatches through explicit commit and detail adapters using the existing helpers. App supplies current commit selection and virtualized reveal operations. CommitView publishes its current file selection/focus/scroll adapter in a layout effect, clears it on cleanup, and retains its local DOM refs. The listener re-registers with current application state and reads the current detail adapter; no listener remains in CommitView. Parent `n`/`p` in files changes the commit without taking focus; in diff it changes the file without leaving diff, including scroll reset on path changes. Commit-keyed remounts and existing focus effects are preserved.
+
+Added coordinator contract tests and listener setup/cleanup/re-registration tests covering single dispatch, current selection, missing/empty details, parent selection versus focus, modifier/composition/defaultPrevented exclusions. Targeted navigation/history tests: 15 passed. Full validation: 96 tests, `pnpm typecheck`, `pnpm build`, and rebuilt-artifact `pnpm test:artifact` passed.
+
+Mounted Strict Mode browser checks on an isolated fixture passed: empty-commit `l` gate; 25 paced `j` presses selected and focused off-screen `empty 180` with 23 mounted buttons; files/tree and diff focus transfer; diff `p` selected beta while retaining diff focus; files `n` remounted root while focusing beta; root alpha End/Home/PageDown scrolled 7674/0/694 px; Shift+k exclusion; reference select retained its keyboard behavior; resizer ArrowRight changed 30 to 32 without pane navigation; list-mode navigation and commit-keyed remount returned correct focus/selection. The old hidden shared browser tab did not reliably deliver native clicks/keys or animation frames, so checks were repeated successfully in a newly opened tab. Temporary servers and fixture were cleaned up.
 
 **Validation:** `pnpm test tests/navigation-client.test.ts tests/history-client.test.ts`, `pnpm typecheck`, and mounted/browser interaction checks.
 
@@ -221,7 +227,7 @@ Use pnpm for project scripts and package management. Install dependencies only a
 | 0 — Safeguards                    | Complete | Baseline: 87 tests; final: 91 tests, 0 failures; typecheck, build and rebuilt-artifact smoke passed. Integrated-browser checklist and reader/graph measurements recorded above. |
 | 1 — SSE delivery                  | Complete | Regression failed before fix (SSE timeout), then passed; 16 targeted tests and 92 full-suite tests passed; typecheck, build and rebuilt-artifact smoke passed. |
 | 2 — Component/hooks extraction    | Complete | Rendering and hooks in separate commits; 94 tests passed; typecheck, build, rebuilt-artifact smoke and mounted browser checks passed (see record above). |
-| 3 — Keyboard coordination         | Not started | —                                                       |
+| 3 — Keyboard coordination         | Complete | One global listener with explicit pane adapters; 96 tests, typecheck, build, artifact smoke and mounted Strict Mode browser checks passed. |
 | 4 — History work reduction        | Not started | —                                                       |
 | 5 — Git parsing/runner boundaries | Not started | —                                                       |
 | 6 — Small shared utilities        | Not started | —                                                       |

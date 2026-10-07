@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { defaultLayout } from "./layout";
 import { ViewToggle, layoutOptions } from "./ViewToggle";
 import { ResizeHandle } from "./ResizeHandle";
-import { ignoresNavigation, navigationAction, navigationKey, parentNavigationAction, type FocusedPane } from "./navigation";
+import type { FocusedPane } from "./navigation";
+import { useKeyboardNavigation, type DetailNavigationAdapter } from "./useKeyboardNavigation";
 import { token } from "./api";
 import { Failure } from "./Failure";
 import { CommitView } from "./CommitView";
@@ -36,24 +37,17 @@ function App() {
   const commitListRef = useRef<CommitListHandle>(null);
   const connection = useLiveConnection(token!);
   const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision);
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      const key = navigationKey(event.key);
-      if (ignoresNavigation(event)) return;
-      const index = commits.findIndex(commit => commit.id === selected);
-      const action = focusedPane === "files"
-        ? parentNavigationAction(focusedPane, key, commits.length, index)
-        : focusedPane === "commits" && (key === "j" || key === "k")
-          ? navigationAction("commits", key, commits.length, index, 0)
-          : null;
-      if (action?.index === undefined) return;
-      event.preventDefault();
-      setSelected(commits[action.index]!.id);
-      commitListRef.current?.reveal(action.index, action.pane === "commits");
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [commits, selected, focusedPane]);
+  const detailNavigationRef = useRef<DetailNavigationAdapter | null>(null);
+  useKeyboardNavigation({
+    focusedPane,
+    commits: {
+      count: commits.length,
+      selectedIndex: commits.findIndex(commit => commit.id === selected),
+      select: index => setSelected(commits[index]!.id),
+      reveal: (index, focus) => commitListRef.current?.reveal(index, focus),
+    },
+    details: detailNavigationRef,
+  });
   useEffect(() => {
     const index = commits.findIndex(commit => commit.id === selected);
     commitListRef.current?.reveal(index, focusedPane === "commits" && selected !== null);
@@ -83,7 +77,7 @@ function App() {
         canLoadMore={history.hasNextPage && !history.isFetching && !history.isError} onLoadMore={loadMoreHistory} fetchingNextPage={history.isFetchingNextPage} />
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
-      {selected ? <CommitView key={selected} id={selected} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
+      {selected ? <CommitView key={selected} navigationRef={detailNavigationRef} id={selected} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
         <section className="files-panel" aria-label="Commit details and changed files"><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></section>
         <section className="diff-panel" aria-label="File diff"><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></section>
       </>}

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { focusNavigationTarget, navigationAction, navigationKey, parentNavigationAction } from "../src/client/navigation";
+import { coordinateNavigation, listenForNavigation, type KeyboardNavigationState } from "../src/client/useKeyboardNavigation";
 
 test("navigation transfers DOM focus to the destination item or diff", () => {
   const calls: string[] = [];
@@ -131,4 +132,73 @@ test("diff navigation scrolls instead of selecting items", () => {
   expect(navigationAction("diff", "j", 2, 0, 2)).toEqual({ pane: "diff", scroll: 60 });
   expect(navigationAction("diff", "k", 2, 0, 2)).toEqual({ pane: "diff", scroll: -60 });
   expect(navigationAction("files", "x", 2, 0, 2)).toBeNull();
+});
+
+test("coordinator dispatches exactly one action to the correct pane adapter", () => {
+  const calls: unknown[] = [];
+  const state: KeyboardNavigationState = {
+    focusedPane: "commits",
+    commits: { count: 300, selectedIndex: 24, select: index => calls.push(["select", index]), reveal: (index, focus) => calls.push(["reveal", index, focus]) },
+    details: { current: { count: 3, selectedIndex: 1, apply: action => calls.push(action) } },
+  };
+  const run = (key: string) => { calls.length = 0; coordinateNavigation(state, key, () => calls.push("prevent")); return [...calls]; };
+  expect(run("ArrowDown")).toEqual(["prevent", ["select", 25], ["reveal", 25, true]]);
+  expect(run("l")).toEqual(["prevent", { pane: "files" }]);
+  expect(run("h")).toEqual([]);
+  state.focusedPane = "files";
+  expect(run("n")).toEqual(["prevent", ["select", 25], ["reveal", 25, false]]);
+  expect(run("p")).toEqual(["prevent", ["select", 23], ["reveal", 23, false]]);
+  expect(run("j")).toEqual(["prevent", { pane: "files", index: 2 }]);
+  expect(run("h")).toEqual(["prevent", { pane: "commits" }]);
+  state.focusedPane = "diff";
+  expect(run("n")).toEqual(["prevent", { pane: "diff", index: 2 }]);
+  expect(run("p")).toEqual(["prevent", { pane: "diff", index: 0 }]);
+  expect(run("End")).toEqual(["prevent", { pane: "diff", edge: "end" }]);
+  expect(run("ArrowDown")).toEqual(["prevent", { pane: "diff", scroll: 60 }]);
+  state.details.current = null;
+  expect(run("h")).toEqual([]);
+  state.focusedPane = "commits";
+  expect(run("l")).toEqual([]);
+  state.details.current = { count: 0, selectedIndex: -1, apply: action => calls.push(action) };
+  expect(run("l")).toEqual([]);
+});
+
+test("keyboard listener cleanup and re-registration do not duplicate or retain old state", () => {
+  const target = new EventTarget();
+  const calls: number[] = [];
+  const state: KeyboardNavigationState = {
+    focusedPane: "commits",
+    commits: { count: 10, selectedIndex: 0, select: index => calls.push(index), reveal: () => {} },
+    details: { current: null },
+  };
+  const register = () => listenForNavigation(target as unknown as Window, state);
+  const send = (overrides: Record<string, unknown> = {}) => {
+    const event = new Event("keydown", { cancelable: true });
+    Object.defineProperties(event, Object.fromEntries(Object.entries({ key: "j", ...overrides }).map(([key, value]) => [key, { value }])));
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const OriginalHTMLElement = globalThis.HTMLElement;
+  // The event target is deliberately not an editable DOM element.
+  globalThis.HTMLElement = class {} as typeof HTMLElement;
+  try {
+    const firstCleanup = register();
+    firstCleanup();
+    const cleanup = register();
+    expect(send()).toBe(true);
+    expect(calls).toEqual([1]);
+    for (const flag of ["altKey", "ctrlKey", "metaKey", "shiftKey", "isComposing"]) expect(send({ [flag]: true })).toBe(false);
+    expect(send({ defaultPrevented: true })).toBe(true);
+    expect(calls).toEqual([1]);
+    cleanup();
+    state.commits.selectedIndex = 5;
+    expect(send()).toBe(false);
+    const remountCleanup = register();
+    expect(send()).toBe(true);
+    expect(calls).toEqual([1, 6]);
+    remountCleanup();
+    expect(send()).toBe(false);
+  } finally {
+    globalThis.HTMLElement = OriginalHTMLElement;
+  }
 });
