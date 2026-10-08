@@ -30,6 +30,11 @@ export function completeReference(value: string, caret: number, option: Referenc
   return { text, caret: token.start + replacement.length + 2 };
 }
 
+export function completionIndex(query: string, active: number, count: number): number {
+  if (active >= 0 && active < count) return active;
+  return query.trim() && count > 0 ? 0 : -1;
+}
+
 export function normalizeSelection(value: string): string {
   return value.split(",").map(part => part.trim()).filter(Boolean).join(", ");
 }
