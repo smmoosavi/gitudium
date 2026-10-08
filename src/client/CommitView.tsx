@@ -9,13 +9,7 @@ import { DiffPatch } from "./DiffPatch";
 import { effectiveDiffMode, type DiffMode } from "./diff";
 import { focusNavigationTarget, type FocusedPane } from "./navigation";
 import type { DetailNavigationAdapter } from "./useKeyboardNavigation";
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, {
-    month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
-  }).format(date);
-}
+import { formatDate } from "./date";
 
 export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef }: {
   navigationRef: RefObject<DetailNavigationAdapter | null>;

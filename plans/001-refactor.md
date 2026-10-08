@@ -205,11 +205,15 @@ Final validation: 109 full-suite tests across 20 files, `pnpm typecheck`, `pnpm 
 
 **Location:** [router validation](../src/server/router.ts), [reader validation](../src/repository/git.ts), [date formatting](../src/client/CommitList.tsx), and extracted client components.
 
-- [ ] Share pure revision/path validation predicates, without importing server schemas into the client or coupling the reader to tRPC.
-- [ ] Preserve layer-specific error messages/codes and document intentional differences, including the API's path-length limit.
-- [ ] Add table-driven cases covering direct-reader and API validation before consolidation.
-- [ ] Reuse a client date formatter preserving locale, options, and invalid-date fallback.
-- [ ] Remove redundant preference guards only if blocked `window.localStorage` property access remains protected.
+- [x] Share pure revision/path validation predicates, without importing server schemas into the client or coupling the reader to tRPC.
+- [x] Preserve layer-specific error messages/codes and document intentional differences, including the API's path-length limit.
+- [x] Add table-driven cases covering direct-reader and API validation before consolidation.
+- [x] Reuse a client date formatter preserving locale, options, and invalid-date fallback.
+- [x] Remove redundant preference guards only if blocked `window.localStorage` property access remains protected.
+
+Implementation: dependency-free [validation predicates](../src/repository/validation.ts) are shared by reader wrappers and API schemas. Reader errors retain `INVALID_INPUT` and their literal-path/commit-specific messages; API schemas retain `BAD_REQUEST`, existing refinement messages and Zod type/length errors. Revisions retain the 1024-character limit. The API alone caps paths at 8192 characters; the reader intentionally has no path-length cap. Table-driven [boundary characterizations](../tests/input-validation.test.ts) passed against the original implementation before consolidation and again afterward, including control characters, Unicode, revision/path limits, traversal/empty segments, optional paths, and literal whitespace/option-like paths. These tests intercept execution after validation so Git resolution and operating-system path limits do not obscure accepted-input contracts.
+
+Both commit views now reuse the [client formatter](../src/client/date.ts), retaining default locale/time zone, identical date/time options and unchanged invalid-date fallback. Preference guards were deliberately retained: hook guards protect access to the `window.localStorage` property, while helper guards protect storage method failures and are needed by direct callers. A hook initialization regression covers both blocked property access and blocked methods; existing helper tests cover reads/writes and layout fallback. No dependencies or user-facing contracts changed.
 
 **Validation:** related repository/API/client tests and `pnpm typecheck`.
 
@@ -244,4 +248,4 @@ Use pnpm for project scripts and package management. Install dependencies only a
 | 3 — Keyboard coordination         | Complete | One global listener with explicit pane adapters; 96 tests, typecheck, build, artifact smoke and mounted Strict Mode browser checks passed. |
 | 4 — History work reduction        | Complete | Separate reference-index/bulk-peeling milestones; initial history medians improve 3.2×–14.1×; 99 tests, typecheck, build and artifact smoke passed. |
 | 5 — Git parsing/runner boundaries | Complete | Separate parser/runner milestones; explicit malformed-record errors and controlled lifecycle regressions; 109 tests, typecheck, build and artifact smoke passed. |
-| 6 — Small shared utilities        | Not started | —                                                       |
+| 6 — Small shared utilities        | Complete | Pre-extraction reader/API boundary characterization; shared predicates and client date formatter; blocked-storage guards retained and tested; 113 tests, typecheck, build, artifact smoke and diagnostics passed. |

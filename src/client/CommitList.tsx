@@ -5,18 +5,10 @@ import { commitRowHeight, graphWidth, graphViewportWidth, graphScrollOffset, vis
 import { shouldLoadHistory } from "./history";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CommitSummary } from "../repository/types";
+import { formatDate } from "./date";
 
 export interface CommitListHandle {
   reveal: (index: number, focus: boolean) => void;
-}
-
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-  month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
-});
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : dateFormat.format(date);
 }
 
 export const CommitList = forwardRef<CommitListHandle, {

@@ -2,12 +2,14 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { RepositoryError } from "../repository/types";
 import { HISTORY_CHUNK_SIZE } from "../repository/limits";
+import { isRevision, isLiteralPath } from "../repository/validation";
 import type { RepositoryReader } from "../repository/types";
 
 const t = initTRPC.context<{ reader: () => Promise<RepositoryReader> }>().create();
-const revision = z.string().min(1).max(1024).refine(value => !value.startsWith("-") && !/[\x00-\x20\x7f]/.test(value), "Expected a non-option revision.");
+const revision = z.string().min(1).max(1024).refine(isRevision, "Expected a non-option revision.");
 const snapshotId = z.string().regex(/^[a-f0-9]{64}$/);
-const path = z.string().min(1).max(8192).refine(value => !value.startsWith("/") && !value.includes("\0") && !value.split("/").some(part => !part || part === "." || part === ".."), "Expected a repository-relative path.");
+// Only the API caps path length; direct reader calls retain literal-path validation without a length cap.
+const path = z.string().min(1).max(8192).refine(isLiteralPath, "Expected a repository-relative path.");
 
 const repositoryProcedure = t.procedure.use(async ({ ctx, next }) =>
   next({ ctx: { reader: await read(ctx.reader) } }),

@@ -8,6 +8,7 @@ import type {
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "./parsers";
 import { GitRunner, MAX_OUTPUT } from "./runner";
+import { isRevision, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
 const MAX_HISTORY_SNAPSHOTS = 128;
@@ -17,13 +18,13 @@ function invalid(message: string): never {
 }
 
 function validateRevision(value: string): void {
-  if (typeof value !== "string" || !value || value.startsWith("-") || /[\x00-\x20\x7f]/.test(value) || value.length > 1024) {
+  if (!isRevision(value) || value.length > 1024) {
     invalid("Expected a non-option revision naming one commit.");
   }
 }
 
 function validatePath(path: string): void {
-  if (typeof path !== "string" || !path || path.startsWith("/") || path.includes("\0") || path.split("/").some(part => part === ".." || part === "." || !part)) {
+  if (!isLiteralPath(path)) {
     invalid("Expected a repository-relative literal file path.");
   }
 }
