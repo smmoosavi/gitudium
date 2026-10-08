@@ -25,7 +25,7 @@ async function readers() {
     throw new RepositoryError("GIT_FAILED", "fixture resolution failure");
   };
   const accepted = async () => { throw new Error("accepted input"); };
-  const apiReader = { commit: accepted, diff: accepted, history: accepted } as unknown as RepositoryReader;
+  const apiReader = { commit: accepted, diff: accepted, sources: accepted, history: accepted } as unknown as RepositoryReader;
   return { reader, api: appRouter.createCaller({ reader: async () => apiReader }) };
 }
 
@@ -36,6 +36,8 @@ test("revision validation preserves reader and API boundaries and layer-specific
       ? { code: "REVISION_NOT_FOUND", message: "Revision does not resolve to a commit." }
       : { code: "INVALID_INPUT", message: "Expected a non-option revision naming one commit." });
     await expect(api.commit({ revision: revision as string })).rejects.toMatchObject(valid
+      ? { message: "accepted input" } : { code: "BAD_REQUEST" });
+    await expect(api.sources({ revision: revision as string, path: "file" })).rejects.toMatchObject(valid
       ? { message: "accepted input" } : { code: "BAD_REQUEST" });
   }
   await expect(api.commit({ revision: "--all" })).rejects.toThrow("Expected a non-option revision.");
@@ -78,8 +80,13 @@ test("literal path validation preserves the API-only length cap and layer-specif
       : { code: "INVALID_INPUT", message: "Expected a repository-relative literal file path." });
     await expect(api.diff({ revision: "HEAD", path: path as string })).rejects.toMatchObject(apiValid
       ? { message: "accepted input" } : { code: "BAD_REQUEST" });
+    await expect(reader.sources("HEAD", path as string)).rejects.toMatchObject(readerValid
+      ? { code: "REVISION_NOT_FOUND" } : { code: "INVALID_INPUT" });
+    await expect(api.sources({ revision: "HEAD", path: path as string })).rejects.toMatchObject(apiValid
+      ? { message: "accepted input" } : { code: "BAD_REQUEST" });
   }
   await expect(reader.diff("HEAD")).rejects.toMatchObject({ code: "REVISION_NOT_FOUND" });
   await expect(api.diff({ revision: "HEAD" })).rejects.toThrow("accepted input");
   await expect(api.diff({ revision: "HEAD", path: "../file" })).rejects.toThrow("Expected a repository-relative path.");
+  await expect(api.sources({ revision: "HEAD" } as { revision: string; path: string })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 });

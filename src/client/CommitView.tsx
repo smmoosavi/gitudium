@@ -10,6 +10,7 @@ import { effectiveDiffMode, type DiffMode } from "./diff";
 import { focusNavigationTarget, type FocusedPane } from "./navigation";
 import type { DetailNavigationAdapter } from "./useKeyboardNavigation";
 import { formatDate } from "./date";
+import { canShowFullFile, contextPageSize, type ContextExpansion } from "./diffContext";
 
 export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef }: {
   navigationRef: RefObject<DetailNavigationAdapter | null>;
@@ -25,6 +26,26 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
   const diff = useQuery({
     queryKey: ["diff", id, path], enabled: path !== null, staleTime: Infinity,
     queryFn: ({ signal }) => api.diff.query({ revision: id, path: path! }, { signal }), retry: false,
+  });
+  const [stableSourceKey, setStableSourceKey] = useState<string | null>(null);
+  const sourceKey = `${id}:${path}`;
+  useEffect(() => {
+    const timer = setTimeout(() => setStableSourceKey(sourceKey), 100);
+    return () => clearTimeout(timer);
+  }, [sourceKey]);
+  const sources = useQuery({
+    queryKey: ["sources", id, path], staleTime: Infinity, gcTime: 0,
+    enabled: path !== null && stableSourceKey === sourceKey && diff.data?.state === "text",
+    queryFn: ({ signal }) => api.sources.query({ revision: id, path: path! }, { signal }), retry: false,
+  });
+  const [contextView, setContextView] = useState<{ key: string; expansion: ContextExpansion; full: boolean }>({ key: "", expansion: {}, full: false });
+  const context = contextView.key === sourceKey ? contextView : { key: sourceKey, expansion: {}, full: false };
+  const textSources = sources.data?.state === "text" ? sources.data : undefined;
+  const fullAllowed = textSources !== undefined && canShowFullFile(textSources);
+  const expand = (gap: string, direction: "above" | "below") => setContextView(previous => {
+    const current = previous.key === sourceKey ? previous : { key: sourceKey, expansion: {}, full: false };
+    const extent = current.expansion[gap] ?? { above: 0, below: 0 };
+    return { ...current, expansion: { ...current.expansion, [gap]: { ...extent, [direction]: extent[direction] + contextPageSize } } };
   });
   const filesRef = useRef<HTMLElement>(null);
   const diffRef = useRef<HTMLDivElement>(null);
@@ -78,15 +99,21 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
     <ChangedFiles files={details.files} mode={filesMode} selected={path} onSelect={setPath} />
     </section>
     <section className={`diff-panel${focusedPane === "diff" ? " pane-focused" : ""}`} aria-label="File diff" onPointerDown={() => { if (path !== null) onPaneFocus("diff"); }} onFocusCapture={() => { if (path !== null) onPaneFocus("diff"); }}>
-    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<button type="button" className="wrap-toggle" aria-label="Wrap diff lines" title="Wrap diff lines" aria-pressed={wrap} onClick={() => onWrapChange(!wrap)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M3 10h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 14h5M3 18h5" /></svg></button><ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
+    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{path}</code></>}</h3><div className="diff-controls">{textSources && <button type="button" disabled={!fullAllowed} title={!fullAllowed ? "Full-file view exceeds the 20,000 line rendering limit; expand context in smaller sections." : undefined} aria-pressed={context.full} onClick={() => setContextView({ ...context, full: !context.full })}>{context.full ? "Hunks only" : "Full file"}</button>}{renderedMode !== diffMode && <span className="muted">Added/deleted file · Unified</span>}<button type="button" className="wrap-toggle" aria-label="Wrap diff lines" title="Wrap diff lines" aria-pressed={wrap} onClick={() => onWrapChange(!wrap)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M3 10h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 14h5M3 18h5" /></svg></button><ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
     <div ref={diffRef} className="diff-content" tabIndex={0} role="region" aria-label="Diff content">
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? <p role="status">Loading diff…</p>
       : diff.isError ? <Failure error={diff.error} retry={() => void diff.refetch()} />
       : diff.data.state === "binary" ? <p role="status">Binary file: no text diff is available.</p>
       : diff.data.state === "oversized" ? <p role="status">Diff exceeds the {diff.data.limitBytes.toLocaleString()} byte limit.</p>
-      : !diff.data.patch ? <p>No textual changes.</p>
-      : <DiffPatch patch={diff.data.patch} mode={renderedMode} wrap={wrap} />}
+      : <>
+        {sources.isFetching && <p role="status">Loading file context…</p>}
+        {sources.isError && <Failure error={sources.error} retry={() => void sources.refetch()} />}
+        {sources.data?.state === "oversized" && <p role="status">File context exceeds the {sources.data.limitBytes.toLocaleString()} byte limit per side. Showing patch only.</p>}
+        {(sources.data?.state === "binary" || sources.data?.state === "unavailable") && <p role="status">File context is unavailable. Showing patch only.</p>}
+        {!diff.data.patch && <p>No textual changes.</p>}
+        <DiffPatch key={sourceKey} patch={diff.data.patch} mode={renderedMode} wrap={wrap} sources={textSources} expansion={context.expansion} full={context.full} onExpand={expand} />
+      </>}
     </div>
     </section>
   </>;

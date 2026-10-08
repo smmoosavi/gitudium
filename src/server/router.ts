@@ -40,6 +40,7 @@ export const appRouter = t.router({
   }).optional()).query(({ ctx, input, signal }) => read(() => ctx.reader.history(input, signal))),
   commit: repositoryProcedure.input(z.object({ revision })).query(({ ctx, input, signal }) => read(() => ctx.reader.commit(input.revision, signal))),
   diff: repositoryProcedure.input(z.object({ revision, path: path.optional() })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal))),
+  sources: repositoryProcedure.input(z.object({ revision, path })).query(({ ctx, input, signal }) => read(() => ctx.reader.sources(input.revision, input.path, signal))),
   health: t.procedure
     .input(z.object({ name: z.string().trim().min(1).max(80) }))
     .query(({ input }) => ({

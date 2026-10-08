@@ -3,7 +3,7 @@ import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
 import type {
   ChangedFile, CommitDetails, DiffResult, HistoryPage,
-  HistoryQuery, Reference, RepositoryMetadata, RepositoryReader,
+  HistoryQuery, Reference, RepositoryMetadata, RepositoryReader, SourceFile, SourceResult,
 } from "./types";
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "./parsers";
@@ -188,7 +188,7 @@ export class GitRepositoryReader implements RepositoryReader {
 
   private async files(id: string, signal?: AbortSignal): Promise<ChangedFile[]> {
     const comparison = await this.comparison(id, signal);
-    const output = await this.run(["diff-tree", "--root", "--no-commit-id", "-r", "--name-status", "-z", "--no-ext-diff", "--no-textconv", "--no-renames", ...comparison, "--"], signal);
+    const output = await this.run(["diff-tree", "--root", "--no-commit-id", "-r", "--name-status", "-z", "--no-ext-diff", "--no-textconv", "--find-renames", "--find-copies", "--find-copies-harder", "-l1000", ...comparison, "--"], signal);
     return parseChangedFiles(output);
   }
 
@@ -197,6 +197,45 @@ export class GitRepositoryReader implements RepositoryReader {
     const output = await this.run(["log", "-1", "-z", `--format=${DETAILS_FORMAT}`, id, "--"], signal);
     const details = parseDetails(output, referenceNames(await this.references(signal)));
     return { ...details, files: await this.files(id, signal) };
+  }
+
+  /** Sources are restricted to exact changed-file destinations, never arbitrary tree paths. */
+  async sources(revision: string, path: string, signal?: AbortSignal): Promise<SourceResult> {
+    validatePath(path);
+    const id = await this.resolve(revision, signal);
+    const comparison = await this.comparison(id, signal);
+    const file = (await this.files(id, signal)).find(file => file.path === path);
+    if (!file) invalid("Expected an exact changed-file path for this commit.");
+    const base = comparison.length === 2 ? comparison[0] : null;
+    const sides: { revision: string; path: string }[] = [];
+    if (base && file.status !== "added") sides.push({ revision: base, path: file.previousPath ?? path });
+    if (file.status !== "deleted") sides.push({ revision: id, path });
+    const blobs: { revision: string; path: string; objectId: string; size: number }[] = [];
+    for (const side of sides) {
+      const entry = await this.run(["ls-tree", "-z", "--full-tree", side.revision, "--", side.path], signal);
+      const match = /^(\d+) (\w+) ([a-f0-9]+)\t([\s\S]*)\0$/.exec(entry);
+      if (!match || match[4] !== side.path || match[2] !== "blob") return { state: "unavailable" };
+      const size = Number((await this.run(["cat-file", "-s", match[3]], signal)).trim());
+      if (!Number.isSafeInteger(size) || size < 0) throw new RepositoryError("GIT_FAILED", "Malformed Git blob size.");
+      blobs.push({ ...side, objectId: match[3], size });
+    }
+    if (blobs.some(blob => blob.size > MAX_DIFF)) return { state: "oversized", limitBytes: MAX_DIFF };
+    const sources: SourceFile[] = [];
+    for (const blob of blobs) {
+      try {
+        const text = await this.run(["cat-file", "blob", blob.objectId], signal, MAX_DIFF);
+        if (text.includes("\0")) return { state: "binary" };
+        sources.push({ revision: blob.revision, path: blob.path, text });
+      } catch (error) {
+        if (error instanceof RepositoryError && error.code === "OUTPUT_LIMIT") return { state: "oversized", limitBytes: MAX_DIFF };
+        throw error;
+      }
+    }
+    return {
+      state: "text",
+      before: base && file.status !== "added" ? sources[0] : null,
+      after: file.status !== "deleted" ? sources[sources.length - 1] : null,
+    };
   }
 
   async diff(revision: string, path?: string, signal?: AbortSignal): Promise<DiffResult> {

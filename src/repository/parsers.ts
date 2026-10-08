@@ -62,14 +62,24 @@ export function parseDetails(output: string, refs: Map<string, string[]>): Omit<
 }
 
 export function parseChangedFiles(output: string): ChangedFile[] {
-  const fields = records(output, 2);
+  if (!output) return [];
+  if (!output.endsWith("\0")) malformed();
+  const fields = output.slice(0, -1).split("\0");
   const statuses: Record<string, ChangedFile["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
   const files: ChangedFile[] = [];
-  for (let i = 0; i < fields.length; i += 2) {
-    const status = Object.hasOwn(statuses, fields[i]) ? statuses[fields[i]] : undefined;
-    if (!status) throw new RepositoryError("GIT_FAILED", "Unsupported changed-file status.");
-    if (!fields[i + 1]) malformed();
-    files.push({ path: fields[i + 1], previousPath: null, status });
+  for (let i = 0; i < fields.length;) {
+    const code = fields[i++];
+    const firstPath = fields[i++];
+    if (!firstPath) malformed();
+    if (/^[RC]\d+$/.test(code)) {
+      const path = fields[i++];
+      if (!path) throw new RepositoryError("GIT_FAILED", "Unsupported changed-file status.");
+      files.push({ path, previousPath: firstPath, status: code.startsWith("R") ? "renamed" : "copied" });
+    } else {
+      const status = Object.hasOwn(statuses, code) ? statuses[code] : undefined;
+      if (!status) throw new RepositoryError("GIT_FAILED", "Unsupported changed-file status.");
+      files.push({ path: firstPath, previousPath: null, status });
+    }
   }
   return files;
 }

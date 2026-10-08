@@ -79,11 +79,11 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 5 — Expandable context
 
-- [ ] Add “Show more above/below” controls between hunks and an optional full-file view.
-- [ ] Provide complete before/after text retrieval for files within explicit size limits; the existing patch alone cannot supply omitted context. Reuse this source data for step 2's multiline-correct highlighting, independent of which context rows are currently expanded.
-- [ ] Resolve exact comparison revisions and old/new paths, including renames, first-parent merges, root commits, and absent sides of added/deleted files.
-- [ ] Design bounded, cancellable source retrieval and caching while preserving binary and size safeguards. Do not load arbitrarily large files into memory or delay the initial patch display.
-- [ ] Test beginning/end of file, overlapping expansions, added/deleted files, and root commits.
+- [x] Add “Show more above/below” controls between hunks and an optional full-file view.
+- [x] Provide complete before/after text retrieval for files within explicit size limits; the existing patch alone cannot supply omitted context. Reuse this source data for step 2's multiline-correct highlighting, independent of which context rows are currently expanded.
+- [x] Resolve exact comparison revisions and old/new paths, including renames, first-parent merges, root commits, and absent sides of added/deleted files.
+- [x] Design bounded, cancellable source retrieval and caching while preserving binary and size safeguards. Do not load arbitrarily large files into memory or delay the initial patch display.
+- [x] Test beginning/end of file, overlapping expansions, added/deleted files, and root commits.
 
 **Outcome:** Changes can be understood in their surrounding code.
 
@@ -144,5 +144,21 @@ Validation:
 Follow-up: inline highlighting now requires at least 25% shared meaningful content relative to the longer line's letter/number/mark/underscore count. Shared whitespace and punctuation do not contribute. Unrelated replacements (including the reported constant-to-import example) fall back to whole-line coloring, while related import-list edits retain word highlights. Focused coverage now includes these similarity fallbacks.
 
 Engine boundary: [diffModel.ts](../src/client/diffModel.ts) defines the stable `DiffEngine` contract (`patch → DiffModel`) and renderer-facing types. Engines return unified lines and split rows with optional highlight segments; segments must concatenate to their line text, and missing segments indicate whole-line fallback. [diffEngine.ts](../src/client/diffEngine.ts) is the default implementation adapter, combining split parsing and word matching. [DiffPatch.tsx](../src/client/DiffPatch.tsx) consumes only the model and performs no patch parsing or matching. Replace the default adapter, or inject an engine through the optional component prop, without changing rendering. Validation: 14 focused tests and typecheck passed, including a fake engine with opaque input proving both render modes use only supplied model data.
+
+### Step 5 — Completed on 2026-10-09
+
+Added a cancellable `sources` API with complete immutable before/after text, revision and path metadata, and nullable absent sides. Source retrieval resolves first-parent comparisons, root commits, renames and copies; accepts only changed literal paths; bypasses external Git helpers; and returns explicit binary, oversized or unavailable states. Each side is bounded to 1 MiB.
+
+The patch renders independently and immediately. Complete source requests begin after a 100 ms stable selection, use request cancellation, and discard inactive query data (`gcTime: 0`) rather than accumulating full files. Source errors retain the patch and offer retry.
+
+[diffContext.ts](../src/client/diffContext.ts) adds source-derived gaps and context rows to the replaceable engine's model without moving parsing into the renderer. Both modes reveal context in 20-line batches from either end, merge overlapping expansions, and offer Full file/Hunks only. Context state resets on commit/file changes. Full-file mode is restricted to 20,000 lines per side; expansion has a cumulative 20,000 additional-context-line budget. Metadata-only changes can reveal their source, and missing-final-newline markers are preserved.
+
+Validation:
+
+- Combined renderer, context, repository, input-validation and API suites: 46 tests passed, including source bounds/cancellation, rename/copy/root/merge comparisons, literal paths, insertion/deletion anchors, overlapping expansions, HTML escaping and rendering limits.
+- `pnpm typecheck`, editor diagnostics and `git diff --check`: passed.
+- Isolated full-application browser fixture: verified a middle-gap expansion from 53 to 33 hidden lines, full 100-line source display, split/wrapped row alignment, Hunks only restoration, and root-commit navigation resetting full-view state while preserving added-file unified rendering.
+
+UI refinement: context controls use compact gutter icons with accessible labels/tooltips. Gaps of 20 lines or fewer show one expand-all button; larger gaps show two directional buttons. Both split sides use the same 40 px gap-row height and full-width background with no trailing padding. Validation: 22 focused tests and typecheck passed; browser measurements verified equal heights, aligned rows and zero unused right-side space in wrapped and unwrapped split layouts.
 
 Step 2 has not started.

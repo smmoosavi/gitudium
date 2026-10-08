@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequestHandler } from "../src/server/http";
 import type { AppRouter } from "../src/server/router";
@@ -21,7 +20,7 @@ async function git(...args: string[]) {
 }
 
 beforeAll(async () => {
-  directory = await mkdtemp(join(tmpdir(), "gitudium-api-"));
+  directory = await mkdtemp(join(process.cwd(), ".gitudium-api-"));
   await git("init", "-b", "main");
   await git("config", "user.name", "API Fixture");
   await git("config", "user.email", "api@example.test");
@@ -60,6 +59,11 @@ test("repository queries navigate empty history, references, pages, details and 
   expect(await api.diff.query({ revision: head, path })).toMatchObject({ state: "text", patch: expect.stringContaining("+second") });
   expect(await api.diff.query({ revision: root, path: "binary" })).toEqual({ state: "binary" });
   expect(await api.diff.query({ revision: root, path: "large" })).toMatchObject({ state: "oversized" });
+  expect(await api.sources.query({ revision: head, path })).toEqual({ state: "text",
+    before: { revision: root, path, text: "first\n" }, after: { revision: head, path, text: "second\n" } });
+  expect(await api.sources.query({ revision: root, path: "binary" })).toEqual({ state: "binary" });
+  expect(await api.sources.query({ revision: root, path: "large" })).toEqual({ state: "oversized", limitBytes: 1024 * 1024 });
+  await expect(api.sources.query({ revision: head, path: "binary" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.commit.query({ revision: "missing-revision" })).rejects.toMatchObject({ data: { code: "NOT_FOUND" } });
 });
 
@@ -102,7 +106,8 @@ test("history pagination uses short GET URLs even with many distinct reference t
 });
 
 test("discovery failures become clear API errors without breaking health", async () => {
-  const outside = await mkdtemp(join(tmpdir(), "gitudium-outside-"));
+  const outside = await mkdtemp(join(process.cwd(), ".gitudium-outside-"));
+  await writeFile(join(outside, ".git"), "gitdir: missing\n");
   const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: createRequestHandler(outside) });
   try {
     const client = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: new URL("/api/trpc", other.url).href })] });

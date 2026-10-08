@@ -72,10 +72,24 @@ export type DiffResult =
   | { state: "binary" }
   | { state: "oversized"; limitBytes: number };
 
+export interface SourceFile {
+  revision: string;
+  path: string;
+  text: string;
+}
+
+/** Full blob sources against the first parent (or an empty tree for root commits). */
+export type SourceResult =
+  | { state: "text"; before: SourceFile | null; after: SourceFile | null }
+  | { state: "binary" }
+  | { state: "oversized"; limitBytes: number }
+  | { state: "unavailable" };
+
 export interface RepositoryReader {
   metadata(signal?: AbortSignal): Promise<RepositoryMetadata>;
   references(signal?: AbortSignal): Promise<Reference[]>;
   history(query?: HistoryQuery, signal?: AbortSignal): Promise<HistoryPage>;
   commit(revision: string, signal?: AbortSignal): Promise<CommitDetails>;
   diff(revision: string, path?: string, signal?: AbortSignal): Promise<DiffResult>;
+  sources(revision: string, path: string, signal?: AbortSignal): Promise<SourceResult>;
 }

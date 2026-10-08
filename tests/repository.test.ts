@@ -16,7 +16,7 @@ async function temporary() {
 }
 
 async function git(cwd: string, ...args: string[]) {
-  const child = Bun.spawn(["git", "--no-pager", ...args], {
+  const child = Bun.spawn(["git", "--no-pager", "--literal-pathspecs", ...args], {
     cwd, stdout: "pipe", stderr: "pipe",
     env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
   });
@@ -236,7 +236,7 @@ test("root commits, unusual literal paths, binary and oversized diffs", async ()
   await git(path, "mv", "--", name, "renamed");
   await git(path, "commit", "-m", "rename");
   const rename = await reader.commit("HEAD");
-  expect(rename.files.map(file => file.status).sort()).toEqual(["added", "deleted"]);
+  expect(rename.files).toEqual([{ path: "renamed", previousPath: name, status: "renamed" }]);
 });
 
 test("linked worktrees, detached HEAD and bare repositories", async () => {
@@ -355,6 +355,93 @@ test("history bulk peeling retains the tip limit before deduplicating peeled ali
   } });
   await expect(reader.history()).rejects.toMatchObject({ code: "OUTPUT_LIMIT", message: "Too many history tips." });
   expect(calls).toBe(2);
+});
+
+test("sources preserve root, modification, rename, copy and deletion sides with literal paths", async () => {
+  const path = await fixture();
+  const name = ":(glob) odd\t\n☃.txt";
+  const root = await commit(path, name, "root\n", "root");
+  const reader = await GitRepositoryReader.discover(path);
+  expect(await reader.sources(root, name)).toEqual({ state: "text", before: null,
+    after: { revision: root, path: name, text: "root\n" } });
+  const modified = await commit(path, name, "modified\n", "modified");
+  expect(await reader.sources(modified, name)).toEqual({ state: "text",
+    before: { revision: root, path: name, text: "root\n" },
+    after: { revision: modified, path: name, text: "modified\n" } });
+  await git(path, "mv", "--", name, "-renamed\nfile");
+  await git(path, "commit", "-m", "rename");
+  const renamed = await git(path, "rev-parse", "HEAD");
+  expect(await reader.sources(renamed, "-renamed\nfile")).toEqual({ state: "text",
+    before: { revision: modified, path: name, text: "modified\n" },
+    after: { revision: renamed, path: "-renamed\nfile", text: "modified\n" } });
+  await expect(reader.sources(renamed, name)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  const copied = await commit(path, "copy", "modified\n", "copy");
+  expect((await reader.commit(copied)).files).toEqual([{ path: "copy", previousPath: "-renamed\nfile", status: "copied" }]);
+  expect(await reader.sources(copied, "copy")).toEqual({ state: "text",
+    before: { revision: renamed, path: "-renamed\nfile", text: "modified\n" },
+    after: { revision: copied, path: "copy", text: "modified\n" } });
+  await git(path, "rm", "--", "copy");
+  await git(path, "commit", "-m", "delete");
+  const deleted = await git(path, "rev-parse", "HEAD");
+  expect(await reader.sources(deleted, "copy")).toEqual({ state: "text",
+    before: { revision: copied, path: "copy", text: "modified\n" }, after: null });
+  await expect(reader.sources(deleted, "-renamed\nfile")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+test("sources use immutable commits and the first merge parent", async () => {
+  const path = await fixture();
+  await commit(path, "file", "root\n", "root");
+  await git(path, "checkout", "-b", "side");
+  await commit(path, "file", "side\n", "side");
+  await git(path, "checkout", "main");
+  const main = await commit(path, "main", "main\n", "main");
+  await git(path, "merge", "--no-ff", "side", "-m", "merge");
+  const merge = await git(path, "rev-parse", "HEAD");
+  const reader = await GitRepositoryReader.discover(path);
+  const internal = reader as unknown as { run: (...args: [string[], AbortSignal?, number?, string?]) => Promise<string> };
+  const run = internal.run.bind(reader);
+  internal.run = async (...args) => {
+    const result = await run(...args);
+    if (args[0][0] === "rev-parse") await git(path, "update-ref", "refs/heads/main", main);
+    return result;
+  };
+  expect(await reader.sources("HEAD", "file")).toEqual({ state: "text",
+    before: { revision: main, path: "file", text: "root\n" },
+    after: { revision: merge, path: "file", text: "side\n" } });
+});
+
+test("sources bound both sides, detect NUL and gitlinks, bypass helpers and cancel", async () => {
+  const path = await fixture();
+  const limit = 1024 * 1024;
+  const root = await commit(path, "file", "é".repeat(limit / 2), "boundary");
+  const reader = await GitRepositoryReader.discover(path);
+  expect((await reader.sources(root, "file")).state).toBe("text");
+  const large = await commit(path, "file", "é".repeat(limit / 2) + "x", "oversized");
+  expect(await reader.sources(large, "file")).toEqual({ state: "oversized", limitBytes: limit });
+  const small = await commit(path, "file", "small", "small");
+  expect(await reader.sources(small, "file")).toEqual({ state: "oversized", limitBytes: limit });
+  const binary = await commit(path, "binary", new Uint8Array([1, 0, 2]), "binary");
+  expect(await reader.sources(binary, "binary")).toEqual({ state: "binary" });
+  const binaryRemoved = await commit(path, "binary", "text", "binary removed");
+  expect(await reader.sources(binaryRemoved, "binary")).toEqual({ state: "binary" });
+  await git(path, "update-index", "--add", "--cacheinfo", `160000,${root},submodule`);
+  await git(path, "commit", "-m", "gitlink");
+  expect(await reader.sources("HEAD", "submodule")).toEqual({ state: "unavailable" });
+  await git(path, "config", "diff.fake.textconv", "nonexistent-helper");
+  await git(path, "config", "diff.fake.command", "nonexistent-helper");
+  await commit(path, ".gitattributes", "file diff=fake\n", "attributes");
+  const text = await commit(path, "file", "literal text", "no helper");
+  expect(await reader.sources(text, "file")).toMatchObject({ state: "text", after: { text: "literal text" } });
+  await expect(reader.sources(text, "file", AbortSignal.abort())).rejects.toMatchObject({ code: "CANCELLED" });
+  const controller = new AbortController();
+  const internal = reader as unknown as { run: (...args: [string[], AbortSignal?, number?, string?]) => Promise<string> };
+  const run = internal.run.bind(reader);
+  internal.run = async (...args) => {
+    const result = await run(...args);
+    if (args[0][0] === "cat-file" && args[0][1] === "-s") controller.abort();
+    return result;
+  };
+  await expect(reader.sources(text, "file", controller.signal)).rejects.toMatchObject({ code: "CANCELLED" });
 });
 
 test("non-commit refs with unborn HEAD produce empty history", async () => {
