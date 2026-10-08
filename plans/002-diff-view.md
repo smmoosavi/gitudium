@@ -41,13 +41,21 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 2 — Syntax highlighting
 
-- [ ] Choose a local highlighting approach after checking bundle size, supported languages, and integration with inline change spans.
-- [ ] Preserve language colors while using backgrounds to indicate additions and deletions.
-- [ ] Use plain-text fallback for unknown languages or highlighting failures.
-- [ ] Ensure multiline language constructs are handled correctly; document any patch-only limitations.
-- [ ] Verify contrast, wrapping, text selection, and safe rendering.
+**Decision:** Use Shiki (TextMate grammars) in a reusable Web Worker. Implement step 5's bounded before/after source retrieval before this step so tokenization can begin at the start of each file, preserving multiline string/comment state. Fetching only nearby context cannot guarantee that state. The expandable-context UI itself is not a prerequisite for highlighting.
 
-**Outcome:** Diffs read like code rather than uniformly tinted text.
+- [ ] Load Shiki and tokenize only in the worker, with lazy loading of selected languages and a theme; measure worker bundle size, initialization cost, and result-application cost.
+- [ ] Render the existing diff immediately without syntax colors. Source loading and highlighting must not block the initial display or navigation.
+- [ ] Start highlighting after a trailing 100 ms debounce keyed to displayed commit, file, and content identity. Restart the timer when the displayed selection changes.
+- [ ] Reuse the worker and keep only the newest pending job rather than queueing every intermediate page during rapid navigation. Use request identities to discard stale results, including source-fetch responses; define worker cancellation/restart and timeout behavior for expensive active jobs.
+- [ ] Tokenize complete before/after source separately, using the exact comparison revisions and old/new paths from step 5, then map tokens to diff rows by source line numbers. Do not concatenate disjoint hunks or tokenize diff markers as source.
+- [ ] Return serializable token data, not HTML. Keep Shiki-specific logic behind a replaceable syntax-highlighting adapter and extend the stable render model only with library-independent styling data.
+- [ ] Combine syntax token boundaries with existing word-change spans so language colors and inline/whole-line change backgrounds coexist without changing source text.
+- [ ] Cache bounded results by immutable source identity, language, and theme; bound source size, token counts, worker execution, and rendered token volume. Keep repository content and language assets local rather than sending source to third-party services.
+- [ ] Use plain-text fallback for unknown languages, unavailable/oversized source, worker failures, or timeouts. If patch-only highlighting is offered, explicitly treat it as best-effort rather than multiline-correct.
+- [ ] Apply ready results without changing row order, line numbers, focus, text selection, or scroll position; verify contrast, wrapping, safe rendering, and both diff modes.
+- [ ] Test multiline constructs spanning omitted context, source-to-row mapping, rapid selection changes, debounce behavior, stale-result rejection, latest-job scheduling, cache bounds, and failure fallbacks.
+
+**Outcome:** Diffs read like code rather than uniformly tinted text, while navigation and initial rendering remain responsive.
 
 ### Step 3 — Unified line numbers and cleaner headers
 
@@ -72,8 +80,9 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 ### Step 5 — Expandable context
 
 - [ ] Add “Show more above/below” controls between hunks and an optional full-file view.
-- [ ] Fetch surrounding before/after source; the existing patch alone cannot supply omitted context.
-- [ ] Design bounded, cancellable source retrieval while preserving binary and size safeguards.
+- [ ] Provide complete before/after text retrieval for files within explicit size limits; the existing patch alone cannot supply omitted context. Reuse this source data for step 2's multiline-correct highlighting, independent of which context rows are currently expanded.
+- [ ] Resolve exact comparison revisions and old/new paths, including renames, first-parent merges, root commits, and absent sides of added/deleted files.
+- [ ] Design bounded, cancellable source retrieval and caching while preserving binary and size safeguards. Do not load arbitrarily large files into memory or delay the initial patch display.
 - [ ] Test beginning/end of file, overlapping expansions, added/deleted files, and root commits.
 
 **Outcome:** Changes can be understood in their surrounding code.
@@ -115,7 +124,7 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ## First-release target
 
-Steps 1–4: word-level highlighting, syntax highlighting, unified line numbers and cleaner headers, and change-block navigation. Review each step separately before proceeding. Later steps are suggestions, not prerequisites for the first release.
+Steps 1–4 remain the first-release feature target: word-level highlighting, syntax highlighting, unified line numbers and cleaner headers, and change-block navigation. Revised execution order: step 1 → step 5 → step 2 → step 3 → step 4. Step 5's bounded complete-source retrieval is a prerequisite for accurate highlighting; its expandable-context UI can be reviewed independently. Steps 6–8 and later enhancements are not prerequisites for the first release. Review each step separately before proceeding.
 
 ## Progress and validation
 
