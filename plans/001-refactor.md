@@ -232,6 +232,19 @@ Both commit views now reuse the [client formatter](../src/client/date.ts), retai
 
 Use pnpm for project scripts and package management. Install dependencies only after a justified manifest change or a missing-dependency validation failure.
 
+## Final merge verification
+
+Completed against the rebuilt artifact after phases 0–6:
+
+- `pnpm test`: 113 tests across 23 files, zero failures; `pnpm typecheck`, `pnpm build`, and `pnpm test:artifact` passed. Artifact smoke covers isolated launch, bundled assets, API/diff access, live SSE invalidation and graceful shutdown.
+- Integrated browser: all three layouts, keyboard resizing (log size 30 → 32), and persisted resize/files/diff/wrap preferences after reload passed. Reference switching, root and modified-file diffs, tree/list views, unified/side-by-side rendering and added-file unified fallback passed.
+- Keyboard: `j` advances commits; `l` transfers focus from commits to files and then diff. Empty-commit details and selection remounts remained usable.
+- Real pagination: disposable branch with 10,020 commits crossed the production 10,000-commit chunk boundary, displayed the loading-more state, and reached the root commit with only 15 commit buttons mounted.
+- Live updates: a new commit appeared without reload. Controlled end-of-stream produced the reconnect/stale-data status, then restored connected status after interception was removed.
+- Error/retry: an injected commit-query 500 rendered an alert; removing interception and clicking Retry restored commit details.
+
+The browser network-rewrite attempt to shorten pages was inconclusive and removed; pagination was instead verified with real production-sized pages. Offline emulation did not terminate an established SSE connection, so reconnect was verified by explicitly ending the stream instead. No source changes were necessary. Temporary server, repository (including pagination branch), interception and scratch files were cleaned up. Final verification is complete; merging the refactor branch remains a separate repository operation.
+
 ## Deferred work
 
 - Graph algorithm rewrite or lane-allocation changes: retain [existing graph contracts](../tests/graph-client.test.ts); profile before considering optimization.
