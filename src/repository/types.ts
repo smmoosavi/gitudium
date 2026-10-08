@@ -22,7 +22,7 @@ export interface RepositoryMetadata {
 
 export interface Reference {
   name: string;
-  kind: "branch" | "remote" | "tag";
+  kind: "branch" | "remote" | "tag" | "other";
   objectId: string;
   commitId: string | null;
   symbolicTarget: string | null;
@@ -43,6 +43,7 @@ export interface HistoryCursor {
 }
 
 export interface HistoryQuery {
+  /** Comma-separated revisions or ref globs; ! excludes reachable commits. Empty selects all refs and HEAD. */
   revision?: string;
   limit?: number;
   cursor?: HistoryCursor;

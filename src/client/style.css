@@ -82,7 +82,17 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .panel-heading > code, .count { font-size: 11px; color: var(--muted); }
 .history-toolbar { padding: 12px 16px 8px; display: flex; align-items: center; gap: 10px; }
 .history-toolbar label { white-space: nowrap; color: var(--muted); font-size: 12px; }
-.history-toolbar select { flex: 1; width: 0; }
+.reference-selector { position: relative; flex: 1; min-width: 0; }
+.reference-input-row { display: flex; gap: 4px; }
+.reference-input-row input { font: inherit; min-width: 0; width: 100%; color: inherit; background: #25262a; border: 1px solid #50535a; border-radius: 4px; padding: 5px 8px; }
+.reference-input-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.reference-input-row button { padding: 4px 6px; }
+.reference-help { display: block; color: var(--muted); font-size: 10px; margin-top: 4px; }
+.reference-options { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; max-height: 280px; overflow: auto; background: var(--panel); border: 1px solid #50535a; border-radius: 4px; box-shadow: 0 6px 18px #0008; }
+.reference-group { padding: 5px 8px; color: var(--muted); font-size: 11px; background: #25262a; }
+.reference-option { padding: 5px 10px; cursor: pointer; overflow-wrap: anywhere; }
+.reference-option[aria-selected="true"] { background: #2e436e; }
+.reference-no-results { padding: 8px; color: var(--muted); }
 .muted { color: var(--muted); font-size: 12px; }
 .history-panel > p, .history-panel > .failure { margin: 8px 16px 12px; }
 .history-panel > button { margin: 12px 16px; }

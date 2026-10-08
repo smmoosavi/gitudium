@@ -26,14 +26,15 @@ test("history pane preserves independent loading, empty, error and pagination st
   expect(errors.match(/>Retry</g)).toHaveLength(2);
 });
 
-test("history pane retains unavailable filters and excludes non-commit references", () => {
+test("history pane retains typed filters and exposes an autocomplete selector", () => {
   const html = render({ revision: "refs/heads/missing", referencesSuccess: true, references: [
     { name: "refs/heads/main", kind: "branch", objectId: "main", commitId: "main", symbolicTarget: null },
     { name: "refs/tags/blob", kind: "tag", objectId: "blob", commitId: null, symbolicTarget: null },
   ] });
-  expect(html).toContain('value="refs/heads/missing" selected=""');
-  expect(html).toContain("refs/heads/missing (unavailable)");
-  expect(html).toContain("refs/heads/main");
+  expect(html).toContain('value="refs/heads/missing"');
+  expect(html).toContain('role="combobox"');
+  expect(html).toContain("Separate with ,");
+  expect(html).toContain("Apply reference selection");
   expect(html).not.toContain("refs/tags/blob");
   expect(html).toContain("pane-focused");
   expect(render({ focusedPane: "diff" })).not.toContain("pane-focused");

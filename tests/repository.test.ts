@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
@@ -11,7 +10,7 @@ afterEach(async () => {
 });
 
 async function temporary() {
-  const path = await mkdtemp(join(tmpdir(), "gitudium-repository-"));
+  const path = await mkdtemp(join(process.cwd(), ".gitudium-repository-"));
   directories.push(path);
   return path;
 }
@@ -55,7 +54,9 @@ test("discovers empty repositories and subdirectories, rejects non-repositories"
   expect(metadata.commonDirectory).toBe(join(path, ".git"));
   expect(await reader.history()).toEqual({ commits: [], nextCursor: null });
   expect(await reader.references()).toEqual([]);
-  await expect(GitRepositoryReader.discover(await temporary())).rejects.toMatchObject({ code: "NOT_A_REPOSITORY" });
+  const nonRepository = await temporary();
+  await writeFile(join(nonRepository, ".git"), "gitdir: missing\n");
+  await expect(GitRepositoryReader.discover(nonRepository)).rejects.toMatchObject({ code: "NOT_A_REPOSITORY" });
 });
 
 test("all-ref topological history returns parents and decorations with snapshot pagination", async () => {
@@ -90,6 +91,71 @@ test("all-ref topological history returns parents and decorations with snapshot 
   }
   const selected = await reader.history({ revision: "v1" });
   expect(selected.commits.map(item => item.id)).toEqual([root]);
+});
+
+test("history expressions union revisions, match full and shorthand refs, and exclude reachable commits", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  await git(path, "branch", "vis");
+  const middle = await commit(path, "middle", "middle", "middle");
+  const tip = await commit(path, "tip", "tip", "tip");
+  await git(path, "update-ref", "refs/remotes/origin/main", tip);
+  await git(path, "update-ref", "refs/agents/session", root);
+  await git(path, "branch", "docs/guide", middle);
+  await git(path, "tag", "release", middle);
+  const reader = await GitRepositoryReader.discover(path);
+  const ids = async (revision: string) => (await reader.history({ revision })).commits.map(item => item.id);
+  expect(await ids("HEAD, main, origin/main")).toEqual([tip, middle, root]);
+  expect(await ids("main,!vis")).toEqual([tip, middle]);
+  expect(await ids("main,!refs/agents/*")).toEqual([tip, middle]);
+  expect(await ids("!refs/agents/*")).toEqual([tip, middle]);
+  expect(await ids("docs/*")).toEqual([middle, root]);
+  expect(await ids("refs/heads/docs/*")).toEqual([middle, root]);
+  expect(await ids("origin/*")).toEqual([tip, middle, root]);
+  expect(await ids("relea?e")).toEqual([middle, root]);
+  expect(await ids("docs/[g]uide")).toEqual([middle, root]);
+  expect(await ids("missing/*")).toEqual([]);
+  expect(await ids("missing/*,!vis")).toEqual([]);
+  expect(await ids("agents/*")).toEqual([]);
+  expect(await ids("main,!missing/*")).toEqual([tip, middle, root]);
+  expect(await ids("")).toEqual([tip, middle, root]);
+  expect(await ids("main~1")).toEqual([middle, root]);
+  expect((await reader.references()).find(ref => ref.name === "refs/agents/session")).toMatchObject({ kind: "other", commitId: root });
+  expect((await reader.history()).commits.find(item => item.id === root)?.references).toContain("refs/agents/session");
+  await expect(ids("missing")).rejects.toMatchObject({ code: "REVISION_NOT_FOUND" });
+});
+
+test("history snapshots freeze exclusions and positive glob tips across ref changes", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  const first = await commit(path, "first", "first", "first");
+  const second = await commit(path, "second", "second", "second");
+  const third = await commit(path, "third", "third", "third");
+  await git(path, "branch", "docs/guide", third);
+  await git(path, "update-ref", "refs/agents/session", root);
+  const reader = await GitRepositoryReader.discover(path);
+  const page = await reader.history({ revision: "docs/*,!refs/agents/*", limit: 1 });
+  expect(page.commits.map(item => item.id)).toEqual([third]);
+  const withoutExclusions = await reader.history({ revision: "docs/*", limit: 1 });
+  expect(page.nextCursor!.snapshot).not.toBe(withoutExclusions.nextCursor!.snapshot);
+  await git(path, "update-ref", "refs/agents/session", second);
+  await git(path, "branch", "-f", "docs/guide", first);
+  await commit(path, "later", "later", "later");
+  expect((await reader.history({ cursor: page.nextCursor!, limit: 200 })).commits.map(item => item.id)).toEqual([second, first]);
+  expect((await reader.history({ revision: "docs/*,!refs/agents/*" })).commits).toEqual([]);
+});
+
+test("default and negative-only history include custom refs and detached HEAD", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  const tree = await git(path, "rev-parse", "HEAD^{tree}");
+  const agent = await git(path, "commit-tree", tree, "-p", root, "-m", "agent");
+  await git(path, "update-ref", "refs/agents/session", agent);
+  await git(path, "checkout", "--detach");
+  const detached = await commit(path, "detached", "detached", "detached");
+  const reader = await GitRepositoryReader.discover(path);
+  expect((await reader.history({ revision: "" })).commits.map(item => item.id).sort()).toEqual([root, agent, detached].sort());
+  expect((await reader.history({ revision: "!main" })).commits.map(item => item.id).sort()).toEqual([agent, detached].sort());
 });
 
 test("history cursors stay small across many distinct tips and preserve the full snapshot", async () => {
@@ -231,6 +297,7 @@ test("validates unsafe inputs and normalizes failed commands and cancellation", 
   await expect(reader.history({ cursor: { snapshot: "--all", offset: 0 } })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await expect(reader.history({}, AbortSignal.abort())).rejects.toMatchObject({ code: "CANCELLED" });
   await rm(join(path, ".git"), { recursive: true });
+  await writeFile(join(path, ".git"), "gitdir: missing\n");
   await expect(reader.references()).rejects.toMatchObject({ code: "GIT_FAILED" });
 });
 

@@ -2,7 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { RepositoryError } from "../repository/types";
 import { HISTORY_CHUNK_SIZE } from "../repository/limits";
-import { isRevision, isLiteralPath } from "../repository/validation";
+import { isRevision, isHistoryExpression, isLiteralPath } from "../repository/validation";
 import type { RepositoryReader } from "../repository/types";
 
 const t = initTRPC.context<{ reader: () => Promise<RepositoryReader> }>().create();
@@ -34,7 +34,7 @@ export const appRouter = t.router({
   metadata: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.metadata(signal))),
   references: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.references(signal))),
   history: repositoryProcedure.input(z.object({
-    revision: revision.optional(),
+    revision: z.string().max(1024).refine(isHistoryExpression, "Expected a history revision expression.").optional(),
     limit: z.number().int().min(1).max(HISTORY_CHUNK_SIZE).optional(),
     cursor: z.object({ snapshot: snapshotId, offset: z.number().int().min(0).max(1_000_000) }).optional(),
   }).optional()).query(({ ctx, input, signal }) => read(() => ctx.reader.history(input, signal))),

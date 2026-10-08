@@ -53,7 +53,7 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 
 ## Browse a repository
 
-1. Choose a **Reference** in the log pane. **All references + HEAD** is selected by default.
+1. Choose or type **References** in the log pane. An empty selection shows **All references + HEAD**. Autocomplete groups refs by namespace, including custom namespaces such as `refs/agents`. Use **Up/Down** and **Enter** to choose a suggestion, or click it; a comma starts the next selection. Press **Enter** or **Apply** to apply typed expressions. Examples: `HEAD, main, origin/main`, `main, !vis`, `main, !refs/agents/*`, `my-feature`, and `docs/*`. Positive selections combine histories; `!` excludes matching refs and all commits reachable from them (including shared ancestors). Wildcards match full ref names or branch/tag/remote shorthand. A negative-only expression starts from all refs + HEAD; an unmatched wildcard selects no refs. Clear the field to restore all history.
 2. Select a commit to see its details and changed files.
 3. Select a changed file to view its diff.
 4. Scroll through history. The initial request loads up to 10,000 commit summaries in topological order; another chunk loads automatically near the bottom. Loaded chunks stay in browser memory without a total-count cap, while only visible rows and a small overscan are rendered. Commit messages, changed files, and diffs load when selected. Git output is still subject to the server's 8 MiB per-command safety limit.

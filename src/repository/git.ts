@@ -8,7 +8,7 @@ import type {
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "./parsers";
 import { GitRunner, MAX_OUTPUT } from "./runner";
-import { isRevision, isLiteralPath } from "./validation";
+import { isRevision, isHistoryExpression, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
 const MAX_HISTORY_SNAPSHOTS = 128;
@@ -87,8 +87,61 @@ export class GitRepositoryReader implements RepositoryReader {
   }
 
   async references(signal?: AbortSignal): Promise<Reference[]> {
-    const output = await this.run(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(objecttype)%00%(*objectname)%00%(*objecttype)%00%(symref)", "refs/heads", "refs/remotes", "refs/tags"], signal);
+    const output = await this.run(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(objecttype)%00%(*objectname)%00%(*objecttype)%00%(symref)", "refs/"], signal);
     return parseReferences(output);
+  }
+
+  private async allHistoryTips(signal?: AbortSignal): Promise<string[]> {
+    const output = await this.run(["rev-parse", "--all"], signal);
+    const ids = [...new Set(output.trim() ? output.trim().split("\n") : [])];
+    const tips: string[] = [];
+    if (ids.length) {
+      const peeled = await this.run(["cat-file", "--batch-check=%(objectname) %(objecttype)"], signal, MAX_OUTPUT,
+        ids.map(id => `${id}^{}`).join("\n") + "\n");
+      for (const line of peeled.trim().split("\n")) {
+        const [id, type] = line.split(" ");
+        if (type === "commit") tips.push(id);
+        if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
+      }
+    }
+    try { tips.push(await this.resolve("HEAD", signal)); } catch (error) {
+      if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
+    }
+    return tips;
+  }
+
+  private async historyTips(expression: string, signal?: AbortSignal): Promise<string[]> {
+    if (!isHistoryExpression(expression)) invalid("Expected a history revision expression.");
+    const terms = expression.trim() ? expression.split(",").map(term => term.trim()) : [];
+    const positive = new Set<string>();
+    const negative = new Set<string>();
+    if (!terms.some(term => !term.startsWith("!"))) {
+      for (const id of await this.allHistoryTips(signal)) positive.add(id);
+    }
+    let refs: Reference[] | undefined;
+    for (const term of terms) {
+      const excluded = term.startsWith("!");
+      const revision = excluded ? term.slice(1) : term;
+      const selected = excluded ? negative : positive;
+      if (/[*?\[]/.test(revision)) {
+        refs ??= await this.references(signal);
+        const glob = new Bun.Glob(revision);
+        for (const ref of refs) {
+          const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
+          if (glob.match(ref.name) || glob.match(shorthand)) {
+            // Resolve the full ref to peel nested annotated tags, too.
+            try { selected.add(await this.resolve(ref.name, signal)); } catch (error) {
+              if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
+            }
+          }
+        }
+      } else {
+        selected.add(await this.resolve(revision, signal));
+      }
+    }
+    if (positive.size + negative.size > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
+    // Signed immutable object IDs capture both reachability roots and exclusions.
+    return [...positive].sort().concat([...negative].sort().map(id => `^${id}`));
   }
 
   async history(query: HistoryQuery = {}, signal?: AbortSignal): Promise<HistoryPage> {
@@ -108,30 +161,10 @@ export class GitRepositoryReader implements RepositoryReader {
       this.historySnapshots.delete(snapshot);
       this.historySnapshots.set(snapshot, tips);
       offset = cursor.offset;
-    } else if (query.revision !== undefined) {
-      tips = [await this.resolve(query.revision, signal)];
     } else {
-      // --all includes all refs, not just the branches and tags displayed as labels.
-      const output = await this.run(["rev-parse", "--all"], signal);
-      const ids = output.trim() ? output.trim().split("\n") : [];
-      tips = [];
-      const uniqueIds = [...new Set(ids)];
-      if (uniqueIds.length) {
-        const peeled = await this.run(["cat-file", "--batch-check=%(objectname) %(objecttype)"], signal, MAX_OUTPUT,
-          uniqueIds.map(id => `${id}^{}`).join("\n") + "\n");
-        for (const line of peeled.trim().split("\n")) {
-          const [id, type] = line.split(" ");
-          if (type === "commit") tips.push(id);
-          if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
-        }
-      }
-      try { tips.push(await this.resolve("HEAD", signal)); } catch (error) {
-        if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
-      }
-      tips = [...new Set(tips)].sort();
-      if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
+      tips = await this.historyTips(query.revision === undefined ? "" : query.revision, signal);
     }
-    if (!tips.length) return { commits: [], nextCursor: null };
+    if (!tips.some(tip => !tip.startsWith("^"))) return { commits: [], nextCursor: null };
     const refs = referenceNames(await this.references(signal));
     const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY_FORMAT}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
     const commits = parseSummaries(output, refs);

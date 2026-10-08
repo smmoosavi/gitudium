@@ -21,7 +21,7 @@ export function parseReferences(output: string): Reference[] {
     if (fields.length !== 6 || !fields[0] || !fields[1] || !fields[2]) malformed();
     const [name, objectId, type, peeled, peeledType, symbolicTarget] = fields;
     return {
-      name, objectId, kind: name.startsWith("refs/heads/") ? "branch" : name.startsWith("refs/remotes/") ? "remote" : "tag",
+      name, objectId, kind: name.startsWith("refs/heads/") ? "branch" : name.startsWith("refs/remotes/") ? "remote" : name.startsWith("refs/tags/") ? "tag" : "other",
       commitId: type === "commit" ? objectId : peeledType === "commit" ? peeled : null,
       symbolicTarget: symbolicTarget || null,
     };

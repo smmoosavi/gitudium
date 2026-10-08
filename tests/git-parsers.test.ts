@@ -11,11 +11,12 @@ test("reference parsers preserve ordering, symbolic targets and one-level tag pe
     ["refs/tags/tag", "tag", "tag", "commit", "commit", ""],
     ["refs/tags/nested", "outer", "tag", "tag", "tag", ""],
     ["refs/tags/blob", "blob", "blob", "", "", ""],
+    ["refs/agents/session", "agent", "commit", "", "", ""],
   ].map(row => row.join("\0")).join("\n") + "\n";
   const refs = parseReferences(output);
-  expect(refs.map(ref => ref.kind)).toEqual(["branch", "remote", "tag", "tag", "tag"]);
+  expect(refs.map(ref => ref.kind)).toEqual(["branch", "remote", "tag", "tag", "tag", "other"]);
   expect(refs[1].symbolicTarget).toBe("refs/remotes/origin/main");
-  expect(refs.slice(3).map(ref => ref.commitId)).toEqual([null, null]);
+  expect(refs.slice(3).map(ref => ref.commitId)).toEqual([null, null, "agent"]);
   expect(referenceNames(refs).get("commit")).toEqual(refs.slice(0, 3).map(ref => ref.name));
   expect(parseReferences("")).toEqual([]);
 });

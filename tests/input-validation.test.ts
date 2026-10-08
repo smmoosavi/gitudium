@@ -25,7 +25,7 @@ async function readers() {
     throw new RepositoryError("GIT_FAILED", "fixture resolution failure");
   };
   const accepted = async () => { throw new Error("accepted input"); };
-  const apiReader = { commit: accepted, diff: accepted } as unknown as RepositoryReader;
+  const apiReader = { commit: accepted, diff: accepted, history: accepted } as unknown as RepositoryReader;
   return { reader, api: appRouter.createCaller({ reader: async () => apiReader }) };
 }
 
@@ -39,6 +39,35 @@ test("revision validation preserves reader and API boundaries and layer-specific
       ? { message: "accepted input" } : { code: "BAD_REQUEST" });
   }
   await expect(api.commit({ revision: "--all" })).rejects.toThrow("Expected a non-option revision.");
+});
+
+test("history expression validation is shared without relaxing commit and diff validation", async () => {
+  const { reader, api } = await readers();
+  const expressions = [
+    ["", true], [" ", true], ["HEAD, main, origin/main", true], ["main,!vis", true],
+    ["main,!refs/agents/*", true], ["docs/*", true], ["!main", true],
+    ["a".repeat(1024), true], ["a".repeat(1025), false], ["main,", false],
+    [",main", false], ["main,,HEAD", false], ["!", false], ["!!main", false],
+    ["--all", false], ["main,!--all", false], ["main, --all", false],
+    ["main\n", false], ["main\0", false], ["main\t", false], ["a b", false],
+    [null, false], [123, false],
+  ] as const;
+  for (const [expression, valid] of expressions) {
+    try {
+      await reader.history({ revision: expression as string });
+      throw new Error("Expected fixture failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryError);
+      if (valid) expect((error as RepositoryError).code).not.toBe("INVALID_INPUT");
+      else expect((error as RepositoryError).code).toBe("INVALID_INPUT");
+    }
+    await expect(api.history({ revision: expression as string })).rejects.toMatchObject(valid
+      ? { message: "accepted input" } : { code: "BAD_REQUEST" });
+  }
+  for (const expression of ["main,!vis", "docs/*", "!main"]) {
+    await expect(reader.commit(expression)).rejects.toMatchObject({ code: "REVISION_NOT_FOUND" });
+    await expect(reader.diff(expression)).rejects.toMatchObject({ code: "REVISION_NOT_FOUND" });
+  }
 });
 
 test("literal path validation preserves the API-only length cap and layer-specific errors", async () => {

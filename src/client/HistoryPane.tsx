@@ -2,6 +2,7 @@ import type { Ref } from "react";
 import { CommitList, type CommitListHandle } from "./CommitList";
 import type { CommitSummary, Reference } from "../repository/types";
 import { Failure } from "./Failure";
+import { ReferenceSelector } from "./ReferenceSelector";
 import type { FocusedPane } from "./navigation";
 
 interface HistoryPaneProps {
@@ -37,11 +38,7 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
       <section ref={historyRef} className={`history-panel${focusedPane === "commits" ? " pane-focused" : ""}`} aria-labelledby="history-title" onPointerDown={() => onPaneFocus("commits")} onFocusCapture={() => onPaneFocus("commits")}>
         <div className="panel-heading"><h2 id="history-title">Log</h2></div>
         <div className="history-toolbar"><label htmlFor="reference">⑂ Reference</label>
-        <select id="reference" value={revision} onChange={event => { onRevisionChange(event.target.value); }}>
-          <option value="">All references + HEAD</option>
-          {revision && referencesSuccess && !references?.some(ref => ref.name === revision && ref.commitId !== null) && <option value={revision}>{revision} (unavailable)</option>}
-          {references?.filter(ref => ref.commitId !== null).map(ref => <option key={ref.name} value={ref.name}>{ref.name}</option>)}
-        </select></div>
+        <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} /></div>
         {referencesPending && <p role="status">Loading references…</p>}
         {referencesError && <Failure error={referencesError} retry={onReferencesRetry} />}
         <p className="muted">Topological order</p>
