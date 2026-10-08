@@ -34,7 +34,10 @@ test("history pane retains typed filters and exposes an autocomplete selector", 
   expect(html).toContain('value="refs/heads/missing"');
   expect(html).toContain('role="combobox"');
   expect(html).toContain("Separate with ,");
-  expect(html).toContain("Apply reference selection");
+  expect(html).toContain('aria-label="References"');
+  expect(html).not.toContain("Apply reference selection");
+  expect(html).not.toContain("⑂ Reference");
+  expect(html).not.toContain("Topological order");
   expect(html).not.toContain("refs/tags/blob");
   expect(html).toContain("pane-focused");
   expect(render({ focusedPane: "diff" })).not.toContain("pane-focused");

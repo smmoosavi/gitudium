@@ -123,7 +123,9 @@ export class GitRepositoryReader implements RepositoryReader {
       const excluded = term.startsWith("!");
       const revision = excluded ? term.slice(1) : term;
       const selected = excluded ? negative : positive;
-      if (/[*?\[]/.test(revision)) {
+      if (revision === "all") {
+        for (const id of await this.allHistoryTips(signal)) selected.add(id);
+      } else if (/[*?\[]/.test(revision)) {
         refs ??= await this.references(signal);
         const glob = new Bun.Glob(revision);
         for (const ref of refs) {

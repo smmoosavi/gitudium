@@ -3,11 +3,11 @@ import type { Reference } from "../src/repository/types";
 import { completeReference, normalizeSelection, referenceOptions, selectionToken } from "../src/client/referenceSelection";
 
 test("autocomplete groups commit refs by namespace and includes HEAD", () => {
-  const options = referenceOptions(["refs/heads/main", "refs/remotes/origin/main", "refs/agents/task", "refs/tags/v1"].map((name): Reference => ({
+  const options = referenceOptions(["refs/tags/v1", "refs/agents/task", "refs/remotes/origin/main", "refs/heads/main"].map((name): Reference => ({
     name, kind: "branch", objectId: "id", commitId: "id", symbolicTarget: null,
   })).concat({ name: "refs/tags/blob", kind: "tag", objectId: "blob", commitId: null, symbolicTarget: null }));
   expect(options.map(option => [option.value, option.group])).toEqual([
-    ["HEAD", "HEAD"], ["main", "refs/heads"], ["origin/main", "refs/remotes"], ["refs/agents/task", "refs/agents"], ["v1", "refs/tags"],
+    ["all", ""], ["HEAD", ""], ["main", "refs/heads"], ["origin/main", "refs/remotes"], ["refs/agents/task", "refs/agents"], ["v1", "refs/tags"],
   ]);
 });
 

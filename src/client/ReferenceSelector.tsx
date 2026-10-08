@@ -13,6 +13,7 @@ export function ReferenceSelector({ value, references, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [caret, setCaret] = useState(value.length);
   const [active, setActive] = useState(-1);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const input = useRef<HTMLInputElement>(null);
   const applied = useRef(value);
   const listId = useId();
@@ -25,7 +26,15 @@ export function ReferenceSelector({ value, references, onChange }: Props) {
   const options = referenceOptions(references).filter(option =>
     option.value.toLowerCase().includes(token.query.toLowerCase()) || option.name.toLowerCase().includes(token.query.toLowerCase()));
   const groups = [...new Set(options.map(option => option.group))];
-  const ordered = groups.flatMap(group => options.filter(option => option.group === group));
+  const ordered = groups.flatMap(group => collapsed.has(group) ? [] : options.filter(option => option.group === group));
+  const toggleGroup = (group: string) => {
+    setCollapsed(current => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group); else next.add(group);
+      return next;
+    });
+    setActive(-1);
+  };
   const apply = (text = draft) => {
     applied.current = normalizeSelection(text);
     onChange(applied.current);
@@ -46,7 +55,7 @@ export function ReferenceSelector({ value, references, onChange }: Props) {
     if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); apply(); }
   }}>
     <div className="reference-input-row">
-      <input ref={input} id="reference" role="combobox" aria-autocomplete="list" aria-expanded={open}
+      <input ref={input} id="reference" role="combobox" aria-label="References" aria-autocomplete="list" aria-expanded={open}
         aria-controls={listId} aria-activedescendant={open && active >= 0 && active < ordered.length ? `${listId}-${active}` : undefined}
         aria-describedby={helpId} autoComplete="off" spellCheck={false} value={draft} placeholder="All references + HEAD"
         onFocus={() => setOpen(true)} onClick={event => { setCaret(event.currentTarget.selectionStart ?? draft.length); setActive(-1); setOpen(true); }}
@@ -62,20 +71,22 @@ export function ReferenceSelector({ value, references, onChange }: Props) {
             else { apply(); setOpen(false); }
           } else if (event.key === "Escape") { event.preventDefault(); setOpen(false); setActive(-1); }
         }} />
-      <button type="button" aria-label="Apply reference selection" onClick={() => { apply(); setOpen(false); }}>Apply</button>
       {draft && <button type="button" aria-label="Show all references" onClick={() => { setDraft(""); setCaret(0); setActive(-1); apply(""); }}>×</button>}
     </div>
     <span id={helpId} className="reference-help">Separate with , · ! excludes history · * matches refs</span>
     {open && <div id={listId} role="listbox" aria-label="References" className="reference-options">
-      {groups.map(group => <div role="group" aria-label={group} key={group}>
-        <div className="reference-group" aria-hidden="true">{group}</div>
+      {groups.map(group => <div role={group ? "group" : undefined} aria-label={group || undefined} key={group}>
+        {group && <button type="button" className="reference-group" aria-expanded={!collapsed.has(group)}
+          onPointerDown={event => event.preventDefault()} onClick={() => toggleGroup(group)}>
+          <span aria-hidden="true">{collapsed.has(group) ? "▸" : "▾"} </span>{group}
+        </button>}
         {ordered.map((option, index) => option.group === group && <div key={option.name} id={`${listId}-${index}`} role="option"
           aria-selected={active === index} className="reference-option" title={option.name}
           onPointerDown={event => { event.preventDefault(); choose(option); }} onPointerMove={() => setActive(index)}>
           {token.negative ? "!" : ""}{option.value}
         </div>)}
       </div>)}
-      {!ordered.length && <div className="reference-no-results">No matching refs. Press Enter to apply a revision or pattern.</div>}
+      {!options.length && <div className="reference-no-results">No matching refs. Press Enter to apply a revision or pattern.</div>}
     </div>}
   </div>;
 }

@@ -37,11 +37,10 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
   return (
       <section ref={historyRef} className={`history-panel${focusedPane === "commits" ? " pane-focused" : ""}`} aria-labelledby="history-title" onPointerDown={() => onPaneFocus("commits")} onFocusCapture={() => onPaneFocus("commits")}>
         <div className="panel-heading"><h2 id="history-title">Log</h2></div>
-        <div className="history-toolbar"><label htmlFor="reference">⑂ Reference</label>
+        <div className="history-toolbar">
         <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} /></div>
         {referencesPending && <p role="status">Loading references…</p>}
         {referencesError && <Failure error={referencesError} retry={onReferencesRetry} />}
-        <p className="muted">Topological order</p>
         {historyPending && <p role="status">Loading history…</p>}
         {historyError && <Failure error={historyError} retry={onHistoryRetry} />}
         {historySuccess && commits.length === 0 && <p>No commits in this history.</p>}

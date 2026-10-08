@@ -156,6 +156,9 @@ test("default and negative-only history include custom refs and detached HEAD", 
   const reader = await GitRepositoryReader.discover(path);
   expect((await reader.history({ revision: "" })).commits.map(item => item.id).sort()).toEqual([root, agent, detached].sort());
   expect((await reader.history({ revision: "!main" })).commits.map(item => item.id).sort()).toEqual([agent, detached].sort());
+  expect((await reader.history({ revision: "all" })).commits.map(item => item.id).sort()).toEqual([root, agent, detached].sort());
+  expect((await reader.history({ revision: "all, !main" })).commits.map(item => item.id).sort()).toEqual([agent, detached].sort());
+  expect((await reader.history({ revision: "HEAD, !all" })).commits).toEqual([]);
 });
 
 test("history cursors stay small across many distinct tips and preserve the full snapshot", async () => {
