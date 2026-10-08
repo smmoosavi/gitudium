@@ -2,7 +2,7 @@
 
 ## Goal and scope
 
-Make changes easier to understand without cluttering the read-only viewer. Implement one step at a time, validate it, and review the result before moving to the next step. This document records suggestions only; no implementation is included.
+Make changes easier to understand without cluttering the read-only viewer. Implement one step at a time, validate it, and review the result before moving to the next step. This document tracks the suggested improvements and completed implementation steps.
 
 The current viewer supports unified and split modes, persisted line wrapping, and line numbers in split mode. It also handles binary and oversized patches explicitly.
 
@@ -31,11 +31,11 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 1 — Word-level highlighting
 
-- [ ] Highlight changed words or character spans within paired removed/added lines.
-- [ ] Use stronger inline highlights over subtle whole-line change backgrounds.
-- [ ] Support unified and split modes; retain whole-line highlighting for unmatched lines.
-- [ ] Bound matching work for long lines and large change blocks, falling back to whole-line highlighting.
-- [ ] Test insertions, deletions, replacements, Unicode, whitespace, and missing final newlines.
+- [x] Highlight changed words or character spans within paired removed/added lines.
+- [x] Use stronger inline highlights over subtle whole-line change backgrounds.
+- [x] Support unified and split modes; retain whole-line highlighting for unmatched lines.
+- [x] Bound matching work for long lines and large change blocks, falling back to whole-line highlighting.
+- [x] Test insertions, deletions, replacements, Unicode, whitespace, and missing final newlines.
 
 **Outcome:** Small edits to long lines become immediately visible.
 
@@ -119,4 +119,21 @@ Steps 1–4: word-level highlighting, syntax highlighting, unified line numbers 
 
 ## Progress and validation
 
-No implementation started. No validation commands run for this documentation-only change.
+### Step 1 — Completed on 2026-10-09
+
+Implemented local, Unicode-aware word token matching with length-weighted common subsequences. Replacement lines retain the existing positional pairing; improved line alignment remains step 7. Both modes share patch-indexed highlight segments, preserve source text and missing-newline markers, and leave unmatched lines with whole-line highlighting. No dependencies added.
+
+Matching falls back for lines over 4,096 UTF-16 code units, lines over 512 tokens, pairs over 65,536 matrix cells, replacement blocks over 100 lines per side, or an exhausted 1,000,000-cell budget per patch.
+
+Validation:
+
+- `pnpm test tests/diff-client.test.ts`: 11 tests passed, including text preservation, Unicode, whitespace, insertions/deletions, multiple hunks, missing newlines, escaping, wrapping, and resource-limit fallbacks.
+- `pnpm typecheck`: passed; editor diagnostics reported no errors in changed TypeScript files.
+- Integrated browser: rendered the actual component with application CSS in both modes, wrapping on/off; verified inline display, distinct addition/deletion highlight backgrounds, and preserved split-pane keyboard focus. This was an isolated component preview, not a full application navigation check.
+- `git diff --check`: passed.
+
+Follow-up: inline highlighting now requires at least 25% shared meaningful content relative to the longer line's letter/number/mark/underscore count. Shared whitespace and punctuation do not contribute. Unrelated replacements (including the reported constant-to-import example) fall back to whole-line coloring, while related import-list edits retain word highlights. Focused coverage now includes these similarity fallbacks.
+
+Engine boundary: [diffModel.ts](../src/client/diffModel.ts) defines the stable `DiffEngine` contract (`patch → DiffModel`) and renderer-facing types. Engines return unified lines and split rows with optional highlight segments; segments must concatenate to their line text, and missing segments indicate whole-line fallback. [diffEngine.ts](../src/client/diffEngine.ts) is the default implementation adapter, combining split parsing and word matching. [DiffPatch.tsx](../src/client/DiffPatch.tsx) consumes only the model and performs no patch parsing or matching. Replace the default adapter, or inject an engine through the optional component prop, without changing rendering. Validation: 14 focused tests and typecheck passed, including a fake engine with opaque input proving both render modes use only supplied model data.
+
+Step 2 has not started.

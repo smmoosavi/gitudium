@@ -1,0 +1,19 @@
+import { defaultDiffEngine } from "./diffEngine";
+
+export type DiffSegment = { text: string; changed: boolean };
+export type DiffLine = { text: string; number?: number; kind: "context" | "addition" | "deletion"; noNewline?: boolean; segments?: DiffSegment[] };
+export type DiffRow = { header: string } | { left?: DiffLine; right?: DiffLine };
+export type UnifiedDiffLine = { text: string; prefix?: string; kind?: "addition" | "deletion" | "hunk"; segments?: DiffSegment[] };
+
+/** Plain render data: segment text concatenates to line text; undefined segments mean whole-line fallback. */
+export interface DiffModel {
+  unified: UnifiedDiffLine[];
+  split: DiffRow[];
+}
+
+/** Engines own parsing, pairing and highlighting, and must preserve source text and row order. */
+export type DiffEngine = (patch: string) => DiffModel;
+
+export function buildDiffModel(patch: string, engine: DiffEngine = defaultDiffEngine): DiffModel {
+  return engine(patch);
+}

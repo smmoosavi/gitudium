@@ -1,3 +1,6 @@
+import type { DiffLine, DiffRow, DiffSegment } from "./diffModel";
+export type { DiffLine, DiffRow } from "./diffModel";
+
 export type DiffMode = "unified" | "split";
 export const diffStorageKey = "gitudium.diff-mode.v1";
 export const wrapStorageKey = "gitudium.diff-wrap.v1";
@@ -21,10 +24,7 @@ export function effectiveDiffMode(mode: DiffMode, status?: string): DiffMode {
   return status === "added" || status === "deleted" ? "unified" : mode;
 }
 
-export type DiffLine = { text: string; number?: number; kind: "context" | "addition" | "deletion"; noNewline?: boolean };
-export type DiffRow = { header: string } | { left?: DiffLine; right?: DiffLine };
-
-export function splitPatch(patch: string): DiffRow[] {
+export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]>): DiffRow[] {
   const rows: DiffRow[] = [];
   let oldNumber = 0;
   let newNumber = 0;
@@ -38,7 +38,7 @@ export function splitPatch(patch: string): DiffRow[] {
   };
   const lines = patch.split("\n");
   if (lines.at(-1) === "") lines.pop();
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
     if (hunk) {
       flush(); oldNumber = Number(hunk[1]); newNumber = Number(hunk[2]); inHunk = true;
@@ -48,9 +48,11 @@ export function splitPatch(patch: string): DiffRow[] {
     } else if (inHunk && line.startsWith("-")) {
       if (added.length) flush();
       const item: DiffLine = { text: line.slice(1), number: oldNumber++, kind: "deletion" };
+      if (highlights?.has(index)) item.segments = highlights.get(index);
       removed.push(item); previous = [item];
     } else if (inHunk && line.startsWith("+")) {
       const item: DiffLine = { text: line.slice(1), number: newNumber++, kind: "addition" };
+      if (highlights?.has(index)) item.segments = highlights.get(index);
       added.push(item); previous = [item];
     } else if (inHunk && line.startsWith(" ")) {
       flush();
