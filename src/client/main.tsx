@@ -58,13 +58,12 @@ function App() {
     <header className="app-header">
       <div className="brand-mark" aria-hidden="true">G</div><h1>Gitudium</h1><span className="header-divider" />
       <span className="project-name">{repositoryName ?? "Git workspace"}</span>
-      <span className="read-only">Read-only</span>
     </header>
-    <div className="workspace-bar"><span className="workspace-tab">Git</span><span className="workspace-caption">Repository history</span>
+    <div className="workspace-bar">
+      <div className="repository-info">
+        {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><span className="repository-path" title={repositoryPath}>{repositoryPath}</span><span className="ref-label" title={metadata.data.branch ?? undefined}>{metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}</span>{metadata.data.bare && <span className="muted">Bare repository</span>}</p>}
+      </div>
       <div className="layout-control"><span>Layout</span><ViewToggle label="Viewer layout" value={mode} options={layoutOptions} onChange={mode => setLayout(current => ({ ...current, mode }))} /></div>
-    </div>
-    <div className="repository-bar">
-    {metadata.isPending ? <p role="status">Loading repository…</p> : metadata.isError ? <Failure error={metadata.error} retry={() => void metadata.refetch()} /> : <p className="repository"><strong title={repositoryPath}>{repositoryPath}</strong><span className="branch-label">⑂ {metadata.data.branch ?? (metadata.data.head ? "Detached HEAD" : "No commits yet")}</span>{metadata.data.bare && <span className="muted">Bare repository</span>}</p>}
     </div>
     <div ref={viewerRef} className={`viewer layout-${mode}`} style={{ gridTemplateColumns: columns, gridTemplateRows: mode === "columns" ? "minmax(0, 1fr)" : split(sizes.secondary) }}>
       <HistoryPane historyRef={historyRef} commitListRef={commitListRef} focusedPane={focusedPane} onPaneFocus={setFocusedPane}
@@ -79,10 +78,10 @@ function App() {
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
       {selected ? <CommitView key={selected} navigationRef={detailNavigationRef} id={selected} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
         <section className="files-panel" aria-label="Commit details and changed files"><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></section>
-        <section className="diff-panel" aria-label="File diff"><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="empty-icon" aria-hidden="true">⑂</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p><span className="empty-note">Local repository · Read-only access</span></div></section>
+        <section className="diff-panel" aria-label="File diff"><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="brand-mark empty-icon" aria-hidden="true">G</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p></div></section>
       </>}
     </div>
-    <footer className="status-bar"><span className={`connection ${connection}`} role="status"><span className="status-dot" aria-hidden="true" />{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Disconnected — reconnecting. Displayed data may be stale."}</span><span>Git · Read-only</span></footer>
+    <footer className="status-bar"><span className={`connection ${connection}`} role="status"><span className="status-dot" aria-hidden="true" />{connection === "connected" ? "Live updates connected" : connection === "connecting" ? "Connecting live updates…" : "Disconnected — reconnecting. Displayed data may be stale."}</span></footer>
   </main>;
 }
 

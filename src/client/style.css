@@ -29,14 +29,15 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .app-header h1 { font-size: 14px; font-weight: 650; }
 .header-divider { width: 1px; height: 20px; background: #50535a; margin: 0 4px; }
 .project-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.read-only { margin-left: auto; color: var(--muted); font-size: 11px; border: 1px solid #50535a; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+.app-header > .brand-mark, .app-header h1, .header-divider { flex-shrink: 0; }
+.project-name { flex-shrink: 0; max-width: 20%; }
 .workspace-bar { display: flex; align-items: center; gap: 20px; height: 40px; flex-shrink: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
-.workspace-tab { height: 100%; display: flex; align-items: center; padding: 0 24px; border-bottom: 2px solid var(--accent); font-weight: 600; }
-.workspace-caption { color: var(--muted); font-size: 12px; }
-.repository-bar { padding: 9px 18px; border-bottom: 1px solid var(--border); }
-.repository { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; }
-.repository strong { font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
-.branch-label { color: #b9a4ed; }
+.repository-info { min-width: 0; padding-left: 18px; font-size: 12px; }
+.repository-info > .failure { position: relative; z-index: 1; }
+.repository { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 12px; }
+.repository-path { min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repository .ref-label { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.repository .muted { flex-shrink: 0; white-space: nowrap; }
 .viewer { display: grid; flex: 1; min-height: 0; }
 .layout-control { margin-left: auto; padding-right: 16px; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .view-toggle { display: inline-flex; flex-shrink: 0; border: 1px solid #50535a; border-radius: 4px; overflow: hidden; }
@@ -155,10 +156,9 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .deletion { color: #edaaa5; background: #402b2e; }
 .hunk { color: #9eb3e8; background: #262e40; }
 .empty-state { min-height: 320px; height: calc(100% - 41px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px; }
-.empty-icon { color: #8b7ac1; background: #2b2936; border: 1px solid #403a55; border-radius: 14px; font-size: 40px; line-height: 1; padding: 14px 20px; margin-bottom: 22px; }
+.empty-icon { width: 68px; height: 68px; border-radius: 14px; font-size: 40px; line-height: 1; margin-bottom: 22px; }
 .empty-state h3 { font-size: 16px; margin-bottom: 10px; }
 .empty-state p { color: var(--muted); }
-.empty-note { color: var(--muted); font-size: 11px; margin-top: 24px; }
 .status-bar { display: flex; justify-content: space-between; gap: 16px; padding: 6px 16px; background: var(--panel); border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 .status-bar > span:last-child { white-space: nowrap; }
 .connection { display: flex; align-items: center; gap: 7px; }
@@ -168,14 +168,14 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .failure { padding: 12px; background: #3d2c2e; border: 1px solid #6e4247; border-radius: 4px; overflow-wrap: anywhere; }
 .failure button { margin-top: 8px; }
 @media (max-width: 850px) {
-  .workspace-caption { display: none; }
+  .app-header { gap: 8px; padding: 0 12px; }
   .workspace-bar { gap: 8px; }
   .layout-control { padding-right: 8px; }
   .view-toggle button { width: 36px; }
   .panel-heading { padding: 8px; gap: 6px; }
   .commit-summary { padding: 10px; }
   .empty-state { min-height: 0; padding: 12px; }
-  .empty-icon, .empty-note { display: none; }
+  .empty-icon { width: 48px; height: 48px; font-size: 28px; margin-bottom: 12px; flex-shrink: 0; }
   .status-bar { flex-wrap: wrap; }
   .file-kind { display: none; }
 }
