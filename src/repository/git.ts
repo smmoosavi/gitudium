@@ -2,12 +2,11 @@ import { createHash } from "node:crypto";
 import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
 import type {
-  ChangedFile, CommitDetails, CommitSummary, DiffResult, HistoryPage,
+  ChangedFile, CommitDetails, DiffResult, HistoryPage,
   HistoryQuery, Reference, RepositoryMetadata, RepositoryReader,
 } from "./types";
 
-const SUMMARY = "%H%x00%h%x00%P%x00%s%x00%an%x00%ae%x00%aI";
-const DETAILS = `${SUMMARY}%x00%cn%x00%ce%x00%cI%x00%B`;
+import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "./parsers";
 const MAX_OUTPUT = 8 * 1024 * 1024;
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
@@ -145,31 +144,7 @@ export class GitRepositoryReader implements RepositoryReader {
 
   async references(signal?: AbortSignal): Promise<Reference[]> {
     const output = await this.run(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(objecttype)%00%(*objectname)%00%(*objecttype)%00%(symref)", "refs/heads", "refs/remotes", "refs/tags"], signal);
-    return output.split("\n").filter(Boolean).map(line => {
-      const [name, objectId, type, peeled, peeledType, symbolicTarget] = line.split("\0");
-      return {
-        name, objectId, kind: name.startsWith("refs/heads/") ? "branch" : name.startsWith("refs/remotes/") ? "remote" : "tag",
-        commitId: type === "commit" ? objectId : peeledType === "commit" ? peeled : null,
-        symbolicTarget: symbolicTarget || null,
-      };
-    });
-  }
-
-  private referenceNames(refs: Reference[]): Map<string, string[]> {
-    const names = new Map<string, string[]>();
-    for (const ref of refs) {
-      if (ref.commitId === null) continue;
-      const attached = names.get(ref.commitId);
-      if (attached) attached.push(ref.name);
-      else names.set(ref.commitId, [ref.name]);
-    }
-    return names;
-  }
-
-  private summary(fields: string[], refs: Map<string, string[]>): CommitSummary {
-    const [id, shortId, parents, subject, name, email, date] = fields;
-    return { id, shortId, parents: parents ? parents.split(" ") : [], subject,
-      author: { name, email, date }, references: refs.get(id) ?? [] };
+    return parseReferences(output);
   }
 
   async history(query: HistoryQuery = {}, signal?: AbortSignal): Promise<HistoryPage> {
@@ -213,12 +188,9 @@ export class GitRepositoryReader implements RepositoryReader {
       if (tips.length > MAX_TIPS) throw new RepositoryError("OUTPUT_LIMIT", "Too many history tips.");
     }
     if (!tips.length) return { commits: [], nextCursor: null };
-    const refs = this.referenceNames(await this.references(signal));
-    const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
-    const fields = output.split("\0");
-    if (fields.at(-1) === "") fields.pop();
-    const commits: CommitSummary[] = [];
-    for (let i = 0; i < fields.length; i += 7) commits.push(this.summary(fields.slice(i, i + 7), refs));
+    const refs = referenceNames(await this.references(signal));
+    const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY_FORMAT}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
+    const commits = parseSummaries(output, refs);
     if (commits.length <= limit) return { commits, nextCursor: null };
     snapshot ??= createHash("sha256").update(tips.join("\n")).digest("hex");
     // Keep immutable tips server-side; cursor size must not grow with ref count.
@@ -238,24 +210,14 @@ export class GitRepositoryReader implements RepositoryReader {
   private async files(id: string, signal?: AbortSignal): Promise<ChangedFile[]> {
     const comparison = await this.comparison(id, signal);
     const output = await this.run(["diff-tree", "--root", "--no-commit-id", "-r", "--name-status", "-z", "--no-ext-diff", "--no-textconv", "--no-renames", ...comparison, "--"], signal);
-    const fields = output.split("\0");
-    fields.pop();
-    const statuses: Record<string, ChangedFile["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
-    const files: ChangedFile[] = [];
-    for (let i = 0; i < fields.length; i += 2) {
-      const status = statuses[fields[i]];
-      if (!status) throw new RepositoryError("GIT_FAILED", "Unsupported changed-file status.");
-      files.push({ path: fields[i + 1], previousPath: null, status });
-    }
-    return files;
+    return parseChangedFiles(output);
   }
 
   async commit(revision: string, signal?: AbortSignal): Promise<CommitDetails> {
     const id = await this.resolve(revision, signal);
-    const fields = (await this.run(["log", "-1", "-z", `--format=${DETAILS}`, id, "--"], signal)).split("\0");
-    const summary = this.summary(fields, this.referenceNames(await this.references(signal)));
-    return { ...summary, committer: { name: fields[7], email: fields[8], date: fields[9] },
-      message: fields[10], files: await this.files(id, signal), diffBase: summary.parents[0] ?? null };
+    const output = await this.run(["log", "-1", "-z", `--format=${DETAILS_FORMAT}`, id, "--"], signal);
+    const details = parseDetails(output, referenceNames(await this.references(signal)));
+    return { ...details, files: await this.files(id, signal) };
   }
 
   async diff(revision: string, path?: string, signal?: AbortSignal): Promise<DiffResult> {

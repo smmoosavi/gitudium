@@ -1,0 +1,65 @@
+import { expect, test } from "bun:test";
+import { parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "../src/repository/parsers";
+
+const fields = ["commit", "short", "parent1 parent2", "", "Name", "mail", "2026-01-01T00:00:00Z"];
+const record = (values: string[]) => values.join("\0") + "\0";
+
+test("reference parsers preserve ordering, symbolic targets and one-level tag peeling", () => {
+  const output = [
+    ["refs/heads/main", "commit", "commit", "", "", ""],
+    ["refs/remotes/origin/HEAD", "commit", "commit", "", "", "refs/remotes/origin/main"],
+    ["refs/tags/tag", "tag", "tag", "commit", "commit", ""],
+    ["refs/tags/nested", "outer", "tag", "tag", "tag", ""],
+    ["refs/tags/blob", "blob", "blob", "", "", ""],
+  ].map(row => row.join("\0")).join("\n") + "\n";
+  const refs = parseReferences(output);
+  expect(refs.map(ref => ref.kind)).toEqual(["branch", "remote", "tag", "tag", "tag"]);
+  expect(refs[1].symbolicTarget).toBe("refs/remotes/origin/main");
+  expect(refs.slice(3).map(ref => ref.commitId)).toEqual([null, null]);
+  expect(referenceNames(refs).get("commit")).toEqual(refs.slice(0, 3).map(ref => ref.name));
+  expect(parseReferences("")).toEqual([]);
+});
+
+test("summary and detail parsers retain empty subjects, roots, merges and multiline messages", () => {
+  const refs = new Map([["commit", ["first", "second"]]]);
+  const commits = parseSummaries(record(fields) + record(["root", "root", "", "root", "", "", fields[6]]), refs);
+  expect(commits[0]).toMatchObject({ subject: "", parents: ["parent1", "parent2"], references: ["first", "second"] });
+  expect(commits[1]).toMatchObject({ parents: [], references: [], author: { name: "", email: "" } });
+  const details = parseDetails(record([...fields, "Committer", "mail", fields[6], "subject\n\nbody\twith unicode λ\n"]), refs);
+  expect(details.message).toBe("subject\n\nbody\twith unicode λ\n");
+  expect(details.diffBase).toBe("parent1");
+  expect(details.committer.name).toBe("Committer");
+  expect(parseDetails(record(["root", "root", "", "", "", "", fields[6], "", "", fields[6], ""]), refs).diffBase).toBeNull();
+  expect(parseSummaries("", refs)).toEqual([]);
+});
+
+test("changed-file parser preserves literal whitespace, Unicode and option-like paths", () => {
+  const paths = ["space name", "tab\tand\nnewline", "λ/file", "-option"];
+  expect(parseChangedFiles(record(["A", paths[0], "M", paths[1], "D", paths[2], "T", paths[3]]))).toEqual(
+    paths.map((path, index) => ({ path, previousPath: null, status: (["added", "modified", "deleted", "type-changed"] as const)[index] })),
+  );
+  expect(parseChangedFiles("")).toEqual([]);
+  expect(() => parseChangedFiles(record(["R100", "file"]))).toThrow("Unsupported changed-file status.");
+});
+
+test("malformed or truncated parser records fail explicitly with GIT_FAILED", () => {
+  const refs = new Map<string, string[]>();
+  const invalid = [
+    () => parseReferences("refs/heads/main\0id\0commit\n"),
+    () => parseReferences("\0id\0commit\0\0\0"),
+    () => parseSummaries(fields.join("\0"), refs),
+    () => parseSummaries(record(fields.slice(0, 6)), refs),
+    () => parseSummaries(record(["", ...fields.slice(1)]), refs),
+    () => parseDetails("", refs),
+    () => parseDetails(record(fields), refs),
+    () => parseDetails(record([...fields, "", "", fields[6], "body"]) + "extra", refs),
+    () => parseChangedFiles("A\0file"),
+    () => parseChangedFiles("A\0"),
+    () => parseChangedFiles(record(["A", ""])),
+  ];
+  for (const parse of invalid) {
+    try { parse(); throw new Error("Expected failure"); } catch (error) {
+      expect(error).toMatchObject({ code: "GIT_FAILED", message: "Malformed Git output." });
+    }
+  }
+});
