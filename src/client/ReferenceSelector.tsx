@@ -1,14 +1,15 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Reference } from "../repository/types";
-import { completeReference, completionIndex, normalizeSelection, referenceOptions, selectionToken, type ReferenceOption } from "./referenceSelection";
+import { completeReference, completionIndex, normalizeSelection, referenceEnterAction, referenceOptions, selectionToken, type ReferenceOption } from "./referenceSelection";
 
 interface Props {
   value: string;
   references: Reference[];
   onChange: (value: string) => void;
+  onCommitFocus: () => void;
 }
 
-export function ReferenceSelector({ value, references, onChange }: Props) {
+export function ReferenceSelector({ value, references, onChange, onCommitFocus }: Props) {
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
   const [caret, setCaret] = useState(value.length);
@@ -71,8 +72,13 @@ export function ReferenceSelector({ value, references, onChange }: Props) {
               : (selectedIndex + (event.key === "ArrowDown" ? 1 : -1) + ordered.length) % ordered.length) : -1);
           } else if (event.key === "Enter" || event.key === ",") {
             const option = open ? ordered[selectedIndex] : undefined;
-            if (option) { event.preventDefault(); choose(option); }
-            else if (event.key === "Enter") { event.preventDefault(); apply(); setOpen(false); }
+            const action = referenceEnterAction(open, !!option);
+            if (action === "complete" && option) { event.preventDefault(); choose(option); }
+            else if (event.key === "Enter") {
+              event.preventDefault();
+              if (action === "apply") { apply(); setOpen(false); }
+              else onCommitFocus();
+            }
           } else if (event.key === "Escape") { event.preventDefault(); setOpen(false); setActive(-1); }
         }} />
       {draft && <button type="button" aria-label="Show all references" onClick={() => { setDraft(""); setCaret(0); setActive(-1); apply(""); }}>×</button>}

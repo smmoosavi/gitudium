@@ -70,7 +70,10 @@ export const CommitList = forwardRef<CommitListHandle, {
   };
   useImperativeHandle(ref, () => ({
     reveal(index, focus) {
-      if (index < 0 || index >= commits.length) return;
+      if (index < 0 || index >= commits.length) {
+        if (focus) scrollRef.current?.focus({ preventScroll: true });
+        return;
+      }
       pendingFocus.current = focus ? index : null;
       virtualizer.scrollToIndex(index, { align: "auto" });
       focusPending();
@@ -109,7 +112,7 @@ export const CommitList = forwardRef<CommitListHandle, {
       </div>
       <span className="graph-overflow-hint">↔ More graph lanes</span>
     </div>}
-    <div className="commit-scroll" ref={scrollRef}>
+    <div className="commit-scroll" ref={scrollRef} tabIndex={-1} aria-label="Commit history">
     <ol className="commits" aria-label="Commits" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
       {items.map(item => {
         const commit = commits[item.index]!;

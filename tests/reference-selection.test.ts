@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Reference } from "../src/repository/types";
-import { completeReference, completionIndex, normalizeSelection, referenceOptions, selectionToken } from "../src/client/referenceSelection";
+import { completeReference, completionIndex, normalizeSelection, referenceEnterAction, referenceOptions, selectionToken } from "../src/client/referenceSelection";
 
 test("autocomplete groups commit refs by namespace and includes HEAD", () => {
   const options = referenceOptions(["refs/tags/v1", "refs/agents/task", "refs/remotes/origin/main", "refs/heads/main"].map((name): Reference => ({
@@ -9,6 +9,13 @@ test("autocomplete groups commit refs by namespace and includes HEAD", () => {
   expect(options.map(option => [option.value, option.group])).toEqual([
     ["all", ""], ["HEAD", ""], ["main", "refs/heads"], ["origin/main", "refs/remotes"], ["refs/agents/task", "refs/agents"], ["v1", "refs/tags"],
   ]);
+});
+
+test("Enter completes suggestions, closes autocomplete, then focuses commits", () => {
+  expect(referenceEnterAction(true, true)).toBe("complete");
+  expect(referenceEnterAction(true, false)).toBe("apply");
+  expect(referenceEnterAction(false, false)).toBe("focus-commits");
+  expect(referenceEnterAction(false, true)).toBe("focus-commits");
 });
 
 test("typed tokens select the first suggestion without arrow navigation", () => {

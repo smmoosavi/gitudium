@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import { useCallback, useRef, type Ref } from "react";
 import { CommitList, type CommitListHandle } from "./CommitList";
 import type { CommitSummary, Reference } from "../repository/types";
 import { Failure } from "./Failure";
@@ -34,17 +34,29 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
   references, referencesPending, referencesSuccess, referencesError, onReferencesRetry,
   historyPending, historySuccess, historyError, onHistoryRetry, commits, head, selected, onSelect,
   canLoadMore, onLoadMore, fetchingNextPage }: HistoryPaneProps) {
+  const listRef = useRef<CommitListHandle>(null);
+  const setListRef = useCallback((handle: CommitListHandle | null) => {
+    listRef.current = handle;
+    if (typeof commitListRef === "function") return commitListRef(handle);
+    if (commitListRef) commitListRef.current = handle;
+  }, [commitListRef]);
+  const focusCommits = () => {
+    onPaneFocus("commits");
+    const index = Math.max(0, commits.findIndex(commit => commit.id === selected));
+    if (commits[index]) onSelect(commits[index].id);
+    listRef.current?.reveal(index, true);
+  };
   return (
       <section ref={historyRef} className={`history-panel${focusedPane === "commits" ? " pane-focused" : ""}`} aria-labelledby="history-title" onPointerDown={() => onPaneFocus("commits")} onFocusCapture={() => onPaneFocus("commits")}>
         <div className="panel-heading"><h2 id="history-title">Log</h2></div>
         <div className="history-toolbar">
-        <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} /></div>
+        <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} onCommitFocus={focusCommits} /></div>
         {referencesPending && <p role="status">Loading references…</p>}
         {referencesError && <Failure error={referencesError} retry={onReferencesRetry} />}
         {historyPending && <p role="status">Loading history…</p>}
         {historyError && <Failure error={historyError} retry={onHistoryRetry} />}
         {historySuccess && commits.length === 0 && <p>No commits in this history.</p>}
-        <CommitList key={revision} ref={commitListRef} commits={commits} head={head} selected={selected} onSelect={onSelect}
+        <CommitList key={revision} ref={setListRef} commits={commits} head={head} selected={selected} onSelect={onSelect}
           canLoadMore={canLoadMore} onLoadMore={onLoadMore} />
         {fetchingNextPage && <p role="status">Loading more history…</p>}
       </section>

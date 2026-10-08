@@ -30,6 +30,10 @@ export function completeReference(value: string, caret: number, option: Referenc
   return { text, caret: token.start + replacement.length + 2 };
 }
 
+export function referenceEnterAction(open: boolean, hasSuggestion: boolean): "complete" | "apply" | "focus-commits" {
+  return !open ? "focus-commits" : hasSuggestion ? "complete" : "apply";
+}
+
 export function completionIndex(query: string, active: number, count: number): number {
   if (active >= 0 && active < count) return active;
   return query.trim() && count > 0 ? 0 : -1;
