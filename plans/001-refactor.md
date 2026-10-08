@@ -183,13 +183,19 @@ Same seven-sample fixture medians after bulk peeling (initial/repeated/subsequen
 
 **Location:** [Git reader](../src/repository/git.ts) and [repository tests](../tests/repository.test.ts).
 
-- [ ] Extract pure parsers for references, summaries, details, and changed files first.
-- [ ] Add parser fixtures for NUL-delimited records, empty output, unusual literal paths, supported statuses, and malformed/truncated records with explicit error behavior.
-- [ ] Keep parser extraction separate from changes to command construction or limits.
-- [ ] Extract subprocess execution behind a narrow internal runner boundary only after parser behavior is stable.
-- [ ] Preserve argument arrays, Git configuration flags, environment filtering, output caps, concurrency accounting, abort handling, and exit/error normalization.
-- [ ] Test runner cleanup on success, failure, cancellation, and output-limit termination using a controlled internal seam where needed.
-- [ ] Avoid re-resolving or changing comparison bases as an incidental cleanup.
+- [x] Extract pure parsers for references, summaries, details, and changed files first.
+- [x] Add parser fixtures for NUL-delimited records, empty output, unusual literal paths, supported statuses, and malformed/truncated records with explicit error behavior.
+- [x] Keep parser extraction separate from changes to command construction or limits.
+- [x] Extract subprocess execution behind a narrow internal runner boundary only after parser behavior is stable.
+- [x] Preserve argument arrays, Git configuration flags, environment filtering, output caps, concurrency accounting, abort handling, and exit/error normalization.
+- [x] Test runner cleanup on success, failure, cancellation, and output-limit termination using a controlled internal seam where needed.
+- [x] Avoid re-resolving or changing comparison bases as an incidental cleanup.
+
+Parser milestone (separate commit): [parsers](../src/repository/parsers.ts) contains pure reference, summary, detail and changed-file parsing plus request-local decoration indexing and existing format constants. Existing command arrays and limits are unchanged. Fixtures cover empty output, empty subjects/identities, roots/merges, multiline messages, NUL record boundaries, literal tabs/newlines/Unicode/option-like paths, symbolic refs, one-level tag decoration semantics, and all supported changed-file statuses. Truncated/malformed records now explicitly throw `GIT_FAILED` with `Malformed Git output.` rather than exposing incomplete objects; unsupported statuses retain their existing error. Empty detail output is invalid; empty reference/history/file output remains valid. Parser fixtures, repository/API integrations and typecheck passed before runner extraction.
+
+Runner milestone: [GitRunner](../src/repository/runner.ts) retains the execution implementation and a narrow injectable spawn boundary; each reader owns one runner, preserving per-reader concurrency. The reader's internal forwarding method keeps existing call sites and comparison-base resolution unchanged. Controlled tests verify command arrays/config flags, cwd, filtered environment, ignored/buffered stdin, UTF-8 byte limits, stdout/stderr caps, lock release, abort listener removal, child termination, and slot reuse after failures. Cases include success, spawn/nonzero-exit failure, pre-aborted and in-flight cancellation, spawn/abort race, fifth concurrent operation, output-limit termination and collection failure while a child is running. No dependencies were added.
+
+Final validation: 109 full-suite tests across 20 files, `pnpm typecheck`, `pnpm build`, and rebuilt-artifact `pnpm test:artifact` passed; changed-file diagnostics are clear.
 
 **Validation:** targeted new parser/runner tests, `pnpm test tests/repository.test.ts tests/viewer-api.test.ts`, and `pnpm typecheck`.
 
@@ -237,5 +243,5 @@ Use pnpm for project scripts and package management. Install dependencies only a
 | 2 — Component/hooks extraction    | Complete | Rendering and hooks in separate commits; 94 tests passed; typecheck, build, rebuilt-artifact smoke and mounted browser checks passed (see record above). |
 | 3 — Keyboard coordination         | Complete | One global listener with explicit pane adapters; 96 tests, typecheck, build, artifact smoke and mounted Strict Mode browser checks passed. |
 | 4 — History work reduction        | Complete | Separate reference-index/bulk-peeling milestones; initial history medians improve 3.2×–14.1×; 99 tests, typecheck, build and artifact smoke passed. |
-| 5 — Git parsing/runner boundaries | Not started | —                                                       |
+| 5 — Git parsing/runner boundaries | Complete | Separate parser/runner milestones; explicit malformed-record errors and controlled lifecycle regressions; 109 tests, typecheck, build and artifact smoke passed. |
 | 6 — Small shared utilities        | Not started | —                                                       |

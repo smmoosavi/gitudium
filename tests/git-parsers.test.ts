@@ -39,7 +39,9 @@ test("changed-file parser preserves literal whitespace, Unicode and option-like 
     paths.map((path, index) => ({ path, previousPath: null, status: (["added", "modified", "deleted", "type-changed"] as const)[index] })),
   );
   expect(parseChangedFiles("")).toEqual([]);
-  expect(() => parseChangedFiles(record(["R100", "file"]))).toThrow("Unsupported changed-file status.");
+  for (const status of ["R100", "toString", "__proto__"]) {
+    expect(() => parseChangedFiles(record([status, "file"]))).toThrow("Unsupported changed-file status.");
+  }
 });
 
 test("malformed or truncated parser records fail explicitly with GIT_FAILED", () => {

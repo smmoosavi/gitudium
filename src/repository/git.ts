@@ -7,7 +7,7 @@ import type {
 } from "./types";
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "./parsers";
-const MAX_OUTPUT = 8 * 1024 * 1024;
+import { GitRunner, MAX_OUTPUT } from "./runner";
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
 const MAX_HISTORY_SNAPSHOTS = 128;
@@ -29,10 +29,12 @@ function validatePath(path: string): void {
 }
 
 export class GitRepositoryReader implements RepositoryReader {
-  private active = 0;
+  private readonly runner: GitRunner;
   private readonly historySnapshots = new Map<string, string[]>();
 
-  private constructor(private readonly cwd: string) {}
+  private constructor(cwd: string) {
+    this.runner = new GitRunner(cwd);
+  }
 
   static async discover(cwd: string, signal?: AbortSignal): Promise<GitRepositoryReader> {
     const reader = new GitRepositoryReader(cwd);
@@ -49,67 +51,8 @@ export class GitRepositoryReader implements RepositoryReader {
     return new GitRepositoryReader(root);
   }
 
-  private async run(args: string[], signal?: AbortSignal, limit = MAX_OUTPUT, input?: string): Promise<string> {
-    if (signal?.aborted) throw new RepositoryError("CANCELLED", "Git operation cancelled.");
-    if (this.active >= 4) throw new RepositoryError("BUSY", "Too many concurrent Git operations; retry later.");
-    this.active++;
-    let child: ReturnType<typeof Bun.spawn> | undefined;
-    let exceeded = false;
-    const abort = () => child?.kill();
-    try {
-      try {
-        child = Bun.spawn(["git", "--no-pager", "--no-replace-objects", "--literal-pathspecs",
-          "-c", "color.ui=false", "-c", "core.quotePath=false", ...args], {
-          cwd: this.cwd,
-          env: {
-            ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
-            GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C",
-          },
-          stdin: input === undefined ? "ignore" : Buffer.from(input), stdout: "pipe", stderr: "pipe",
-        });
-      } catch {
-        throw new RepositoryError("GIT_UNAVAILABLE", "Unable to start Git; check Git installation and launch directory.");
-      }
-      signal?.addEventListener("abort", abort, { once: true });
-      if (signal?.aborted) abort();
-      const collect = async (stream: ReadableStream<Uint8Array>, cap: number) => {
-        const chunks: Uint8Array[] = [];
-        let size = 0;
-        const reader = stream.getReader();
-        try {
-          while (true) {
-            const { value: chunk, done } = await reader.read();
-            if (done) break;
-            size += chunk.byteLength;
-            if (size > cap) {
-              exceeded = true;
-              child?.kill();
-              await reader.cancel();
-              break;
-            }
-            chunks.push(chunk);
-          }
-        } finally {
-          reader.releaseLock();
-        }
-        return Buffer.concat(chunks).toString("utf8");
-      };
-      const [stdout, , status] = await Promise.all([
-        collect(child.stdout as ReadableStream<Uint8Array>, limit),
-        collect(child.stderr as ReadableStream<Uint8Array>, 64 * 1024), child.exited,
-      ]);
-      if (signal?.aborted) throw new RepositoryError("CANCELLED", "Git operation cancelled.");
-      if (exceeded) throw new RepositoryError("OUTPUT_LIMIT", "Git output exceeded the configured size limit.");
-      if (status !== 0) throw new RepositoryError("GIT_FAILED", "Git could not complete the repository operation.");
-      return stdout;
-    } finally {
-      signal?.removeEventListener("abort", abort);
-      if (child && child.exitCode === null) {
-        child.kill();
-        await child.exited;
-      }
-      this.active--;
-    }
+  private run(args: string[], signal?: AbortSignal, limit = MAX_OUTPUT, input?: string): Promise<string> {
+    return this.runner.run(args, signal, limit, input);
   }
 
   private async resolve(revision: string, signal?: AbortSignal): Promise<string> {

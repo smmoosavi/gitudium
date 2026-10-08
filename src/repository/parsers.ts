@@ -66,7 +66,7 @@ export function parseChangedFiles(output: string): ChangedFile[] {
   const statuses: Record<string, ChangedFile["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
   const files: ChangedFile[] = [];
   for (let i = 0; i < fields.length; i += 2) {
-    const status = statuses[fields[i]];
+    const status = Object.hasOwn(statuses, fields[i]) ? statuses[fields[i]] : undefined;
     if (!status) throw new RepositoryError("GIT_FAILED", "Unsupported changed-file status.");
     if (!fields[i + 1]) malformed();
     files.push({ path: fields[i + 1], previousPath: null, status });
