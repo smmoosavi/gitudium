@@ -25,7 +25,7 @@ export function coordinateNavigation(state: KeyboardNavigationState, key: string
   const { focusedPane, commits } = state;
   const parent = focusedPane === "files"
     ? parentNavigationAction(focusedPane, key, commits.count, commits.selectedIndex)
-    : focusedPane === "commits" && (key === "j" || key === "k")
+    : focusedPane === "commits" && ["j", "k", "Home", "End"].includes(key)
       ? navigationAction("commits", key, commits.count, commits.selectedIndex, 0)
       : null;
   if (parent?.index !== undefined) {

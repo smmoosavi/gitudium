@@ -73,7 +73,7 @@ test("j and k move one item and stop at list boundaries", () => {
     expect(navigationAction(pane, "j", 3, 0, 3)).toEqual({ pane, index: 1 });
     expect(navigationAction(pane, "k", 3, 2, 3)).toEqual({ pane, index: 1 });
     expect(navigationAction(pane, "j", 3, 2, 3)).toEqual({ pane, index: 2 });
-    expect(navigationAction(pane, "k", 3, 0, 3)).toEqual({ pane, index: 0 });
+    expect(navigationAction(pane, "k", 3, 0, 3)).toEqual({ pane, index: 0, ...(pane === "files" ? { edge: "start" } : {}) });
     expect(navigationAction(pane, "j", 3, -1, 3)).toEqual({ pane, index: 0 });
     expect(navigationAction(pane, "k", 3, -1, 3)).toEqual({ pane, index: 0 });
     expect(navigationAction(pane, "j", 0, -1, 0)).toBeNull();
@@ -102,10 +102,53 @@ test("diff supports page scrolling and jumping to the start or end", () => {
   expect(navigationAction("diff", "Home", 2, 0, 2)).toEqual({ pane: "diff", edge: "start" });
   expect(navigationAction("diff", "End", 2, 0, 2)).toEqual({ pane: "diff", edge: "end" });
   for (const pane of ["commits", "files"] as const) {
-    for (const key of ["PageDown", "PageUp", "Home", "End"]) {
+    for (const key of ["PageDown", "PageUp"]) {
       expect(navigationAction(pane, key, 2, 0, 2)).toBeNull();
     }
   }
+});
+
+test("Home and End select list boundaries, including newly loaded history", () => {
+  for (const pane of ["commits", "files"] as const) {
+    expect(navigationAction(pane, "Home", 3, 2, 3)).toEqual({ pane, index: 0, ...(pane === "files" ? { edge: "start" } : {}) });
+    expect(navigationAction(pane, "End", 3, 0, 3)).toEqual({ pane, index: 2 });
+    for (const key of ["Home", "End", "k"]) expect(navigationAction(pane, key, 0, -1, 0)).toBeNull();
+  }
+  const selected: number[] = [];
+  const state: KeyboardNavigationState = {
+    focusedPane: "commits",
+    commits: { count: 10000, selectedIndex: 0, select: index => selected.push(index), reveal: (index, focus) => { expect(focus).toBe(true); expect(index).toBe(selected.at(-1)!); } },
+    details: { current: null },
+  };
+  for (const count of [10000, 20000, 25000]) {
+    state.commits.count = count;
+    expect(coordinateNavigation(state, "End", () => {})).toBe(true);
+  }
+  expect(coordinateNavigation(state, "Home", () => {})).toBe(true);
+  expect(selected).toEqual([9999, 19999, 24999, 0]);
+});
+
+test("files Home and k at the first file reveal commit details after focusing the file", () => {
+  const calls: string[] = [];
+  const file = {
+    parentElement: null,
+    focus: () => calls.push("focus first file"),
+    scrollIntoView: () => calls.push("reveal first file"),
+  };
+  const panel = { scrollTo: (options: ScrollToOptions) => { expect(options).toEqual({ top: 0 }); calls.push("reveal commit details"); } };
+  const viewer = {
+    querySelectorAll: () => [file],
+    querySelector: (selector: string) => selector === ".files-panel" ? panel : file,
+  } as unknown as HTMLElement;
+  for (const key of ["Home", "k", "ArrowUp"]) {
+    calls.length = 0;
+    const action = navigationAction("files", key, 3, 0, 3)!;
+    focusNavigationTarget(viewer, action.pane, action.index, true, action.edge);
+    expect(calls).toEqual(["focus first file", "reveal first file", "reveal commit details"]);
+  }
+  calls.length = 0;
+  focusNavigationTarget(viewer, "files", 0);
+  expect(calls).toEqual(["focus first file", "reveal first file"]);
 });
 
 test("n and p navigate parent items without changing the focused pane", () => {

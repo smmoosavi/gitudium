@@ -29,6 +29,12 @@ export function navigationAction(pane: FocusedPane, key: string, count: number, 
     if (key === "Home") return { pane, edge: "start" };
     if (key === "End") return { pane, edge: "end" };
   }
+  if (pane === "files" || pane === "commits") {
+    if (key === "Home" || key === "End") {
+      if (!count) return null;
+      return { pane, index: key === "Home" ? 0 : count - 1, ...(pane === "files" && key === "Home" ? { edge: "start" as const } : {}) };
+    }
+  }
   if (pane === "files") {
     if (key === "j") {
       if (!count) return null;
@@ -36,7 +42,7 @@ export function navigationAction(pane: FocusedPane, key: string, count: number, 
     }
     if (key === "k") {
       if (!count) return null;
-      return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex - 1)) };
+      return { pane, index: selectedIndex < 0 ? 0 : Math.max(0, Math.min(count - 1, selectedIndex - 1)), ...(selectedIndex === 0 ? { edge: "start" as const } : {}) };
     }
     if (key === "h") return { pane: "commits" };
     if (key === "l") {
@@ -63,7 +69,7 @@ export function navigationAction(pane: FocusedPane, key: string, count: number, 
   return null;
 }
 
-export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number, focus = true): void {
+export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedPane, index?: number, focus = true, edge?: "start" | "end"): void {
   if (!viewer) return;
   const selector = pane === "commits" ? ".commits button" : ".files button";
   const target = pane === "diff" ? viewer.querySelector<HTMLElement>(".diff-content")
@@ -76,6 +82,7 @@ export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedP
   }
   if (focus) target.focus({ preventScroll: true });
   target.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (pane === "files" && edge === "start") viewer.querySelector<HTMLElement>(".files-panel")?.scrollTo({ top: 0 });
 }
 
 export function ignoresNavigation(event: KeyboardEvent): boolean {

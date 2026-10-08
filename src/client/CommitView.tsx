@@ -28,6 +28,7 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
   });
   const filesRef = useRef<HTMLElement>(null);
   const diffRef = useRef<HTMLDivElement>(null);
+  const pendingFilesEdge = useRef<"start" | undefined>(undefined);
   useEffect(() => {
     if (selectedPath === null && path !== null) setPath(path);
   }, [selectedPath, path]);
@@ -38,21 +39,23 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
       apply: action => {
         if (action.index !== undefined) setPath(paths[action.index]!);
         if (action.pane === "diff" && path === null && paths.length) setPath(paths[0]!);
+        pendingFilesEdge.current = action.pane === "files" && action.edge === "start" ? "start" : undefined;
         const diffContent = diffRef.current;
-        if (diffContent) {
+        if (diffContent && action.pane === "diff") {
           if (action.pane === "diff" && action.index !== undefined && paths[action.index] !== path) diffContent.scrollTo({ top: 0 });
           if (action.scroll !== undefined) diffContent.scrollBy({ top: action.scroll });
           if (action.page !== undefined) diffContent.scrollBy({ top: action.page * diffContent.clientHeight });
           if (action.edge !== undefined) diffContent.scrollTo({ top: action.edge === "start" ? 0 : diffContent.scrollHeight });
         }
         onPaneFocus(action.pane);
-        focusNavigationTarget(filesRef.current?.parentElement ?? null, action.pane, action.index);
+        focusNavigationTarget(filesRef.current?.parentElement ?? null, action.pane, action.index, true, action.edge);
       },
     };
     return () => { navigationRef.current = null; };
   }, [commit.data, filesMode, focusedPane, onPaneFocus, path, navigationRef]);
   useEffect(() => {
-    focusNavigationTarget(filesRef.current?.parentElement ?? null, "files", undefined, focusedPane === "files");
+    focusNavigationTarget(filesRef.current?.parentElement ?? null, "files", undefined, focusedPane === "files", pendingFilesEdge.current);
+    pendingFilesEdge.current = undefined;
   }, [path, focusedPane, filesMode]);
   if (commit.isPending || commit.isError) return <>
     <section className="files-panel" aria-label="Commit details and changed files">{commit.isPending ? <p className="empty-hint" role="status">Loading commit…</p> : <Failure error={commit.error} retry={() => void commit.refetch()} />}</section>
