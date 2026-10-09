@@ -28,6 +28,32 @@ test("unrelated edits remain unmatched and repeated lines have deterministic ord
   expect(createLineAligner()(["你好 世界 old", ""], ["你好 世界 new", ""])).toEqual([{ before: 0, after: 0 }, { before: 1, after: 1 }]);
 });
 
+test("reindented punctuation-only closing lines pair without pairing unrelated punctuation", () => {
+  expect(createLineAligner()(["    }", "    };", "  },"], ["      }", "      };", "    },"])).toEqual([
+    { before: 0, after: 0 }, { before: 1, after: 1 }, { before: 2, after: 2 },
+  ]);
+  expect(createLineAligner()(["    }", "    });", "  },"], ["      }", "      };", "    });", "  });"])).toEqual([
+    { before: 0, after: 0 }, { after: 1 }, { before: 1, after: 2 }, { before: 2 }, { after: 3 },
+  ]);
+  expect(createLineAligner()(["  }"], ["    }"])).toEqual([{ before: 0, after: 0 }]);
+  expect(createLineAligner()(["  });"], ["    };"])).toEqual([{ before: 0, after: 0 }]);
+  expect(createLineAligner()(["  }"], ["    ["])).toEqual([{ before: 0 }, { after: 0 }]);
+});
+
+test("paired closing delimiters retain inline indentation and punctuation highlights", () => {
+  const model = pairedDiffEngine("@@ -1,3 +1,3 @@\n-    }\n-    };\n-  },\n+      }\n+      };\n+    },\n");
+  const rows = model.split.filter((row): row is { left?: DiffLine; right?: DiffLine } => !("header" in row) && !("gap" in row) && (row.left?.number !== undefined || row.right?.number !== undefined));
+  expect(rows).toHaveLength(3);
+  for (const row of rows) {
+    expect(row.left?.segments?.some(segment => segment.changed)).toBe(true);
+    expect(row.right?.segments?.some(segment => segment.changed)).toBe(true);
+    expect(row.left?.segments?.map(segment => segment.text).join("")).toBe(row.left?.text);
+    expect(row.right?.segments?.map(segment => segment.text).join("")).toBe(row.right?.text);
+  }
+  const unrelated = pairedDiffEngine("@@ -1 +1 @@\n-  }\n+    [\n");
+  expect(unrelated.unified.filter(line => line.segments)).toHaveLength(0);
+});
+
 test("large blocks, long lines and cumulative candidates fall back to positional pairing", () => {
   const lines = Array.from({ length: 101 }, (_, index) => `line ${index}`);
   expect(createLineAligner()(lines, ["new"])[0]).toEqual({ before: 0, after: 0 });

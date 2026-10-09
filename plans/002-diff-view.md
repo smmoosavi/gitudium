@@ -99,7 +99,7 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 7 — Better split alignment and scrolling
 
-- [x] Match related removed/added lines within each replacement block using deterministic, order-preserving alignment. Weak matches remain separate; exact lines are preferred. A persistent Pair lines toolbar toggle defaults off, preserving positional pairing; enabling it changes split alignment and the inline-highlight pair selection in both modes.
+- [x] Match related removed/added lines within each replacement block using deterministic, order-preserving alignment. Weak matches remain separate; indentation-only differences pair as exact matches. Punctuation-only lines use non-whitespace punctuation similarity so related closing delimiters also pair and retain inline indentation/punctuation highlights. A persistent Pair lines toolbar toggle defaults off, preserving positional pairing; enabling it changes split alignment and the inline-highlight pair selection in both modes.
 - [x] Reuse bounded word-level matching for similarity and apply inline highlights to the selected pairs. Limit blocks to 100 lines per side, 4,096 candidate pairs per patch, and 4,096 characters per line; oversized blocks fall back to positional pairing. Token matching retains its own patch budget.
 - [ ] Offer synchronized horizontal scrolling while retaining independent scrolling when desired. Deferred explicitly: leave current scrolling behavior unchanged.
 - [x] Preserve aligned row heights when wrapping and verify uneven replacement blocks, insertion/deletion offsets, repeated lines, Unicode, newline markers, and bounded fallback.

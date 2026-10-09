@@ -19,11 +19,13 @@ export function createLineAligner(): LineAligner {
       for (let j = 0; j < after.length; j++) {
         const left = before[i]!;
         const right = after[j]!;
-        if (left === right) { similarities[i * after.length + j] = 1; continue; }
-        const change = highlight(left, right);
+        if (left.trim() === right.trim()) { similarities[i * after.length + j] = 1; continue; }
+        const punctuationOnly = meaningful(left) === 0 && meaningful(right) === 0;
+        const change = highlight(punctuationOnly ? left.replace(/\s/g, "") : left, punctuationOnly ? right.replace(/\s/g, "") : right);
         if (!change) continue;
-        const shared = change.before.reduce((sum, segment) => sum + (segment.changed ? 0 : meaningful(segment.text)), 0);
-        const similarity = shared / Math.max(meaningful(left), meaningful(right), 1);
+        const size = (text: string) => punctuationOnly ? text.replace(/\s/g, "").length : meaningful(text);
+        const shared = change.before.reduce((sum, segment) => sum + (segment.changed ? 0 : size(segment.text)), 0);
+        const similarity = shared / Math.max(size(left), size(right), 1);
         if (similarity >= 0.5) similarities[i * after.length + j] = similarity;
       }
     }

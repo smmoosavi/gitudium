@@ -47,10 +47,13 @@ export function createWordHighlighter() {
       }
     }
     const meaningfulLength = (text: string) => (text.match(/[\p{L}\p{N}\p{M}_]/gu) ?? []).length;
-    const sharedLength = result.before.reduce((total, segment) => total + (segment.changed ? 0 : meaningfulLength(segment.text)), 0);
     const contentLength = Math.max(meaningfulLength(before), meaningfulLength(after));
-    // Spaces and punctuation alone do not make unrelated lines a useful inline comparison.
-    if (contentLength === 0 || sharedLength / contentLength < 0.25) return undefined;
+    const punctuationOnly = contentLength === 0;
+    const comparisonLength = (text: string) => punctuationOnly ? text.replace(/\s/g, "").length : meaningfulLength(text);
+    const sharedLength = result.before.reduce((total, segment) => total + (segment.changed ? 0 : comparisonLength(segment.text)), 0);
+    const totalLength = Math.max(comparisonLength(before), comparisonLength(after));
+    // Shared whitespace alone is not enough; punctuation is useful for delimiter-only lines.
+    if (totalLength === 0 || sharedLength / totalLength < (punctuationOnly ? 0.5 : 0.25)) return undefined;
     return result;
   };
 }
