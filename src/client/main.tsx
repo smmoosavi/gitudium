@@ -47,6 +47,7 @@ function App() {
       reveal: (index, focus) => commitListRef.current?.reveal(index, focus),
     },
     details: detailNavigationRef,
+    focusReferences: () => historyRef.current?.querySelector<HTMLInputElement>("#reference")?.focus(),
   });
   useEffect(() => {
     const index = commits.findIndex(commit => commit.id === selected);

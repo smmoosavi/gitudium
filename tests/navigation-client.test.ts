@@ -206,6 +206,48 @@ test("coordinator dispatches exactly one action to the correct pane adapter", ()
   expect(run("l")).toEqual([]);
 });
 
+test("Left and h focus references from commits without requiring commit details", () => {
+  const calls: string[] = [];
+  const state: KeyboardNavigationState = {
+    focusedPane: "commits",
+    commits: { count: 0, selectedIndex: -1, select: () => {}, reveal: () => {} },
+    details: { current: null },
+    focusReferences: () => calls.push("references"),
+  };
+  for (const key of ["h", "ArrowLeft"]) {
+    expect(coordinateNavigation(state, key, () => calls.push("prevent"))).toBe(true);
+  }
+  expect(calls).toEqual(["prevent", "references", "prevent", "references"]);
+  state.focusedPane = "files";
+  expect(coordinateNavigation(state, "h", () => calls.push("prevent"))).toBe(false);
+  expect(calls).toHaveLength(4);
+});
+
+test("reference inputs keep h, l and arrow keys as normal editing keys", () => {
+  const OriginalHTMLElement = globalThis.HTMLElement;
+  globalThis.HTMLElement = class { closest() { return this; } } as unknown as typeof HTMLElement;
+  const target = new EventTarget();
+  let focused = false;
+  const cleanup = listenForNavigation(target as unknown as Window, {
+    focusedPane: "commits",
+    commits: { count: 0, selectedIndex: -1, select: () => {}, reveal: () => {} },
+    details: { current: null },
+    focusReferences: () => { focused = true; },
+  });
+  try {
+    for (const key of ["h", "ArrowLeft", "l", "ArrowRight"]) {
+      const event = new Event("keydown", { cancelable: true });
+      Object.defineProperties(event, { key: { value: key }, target: { value: new HTMLElement() } });
+      target.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(focused).toBe(false);
+  } finally {
+    cleanup();
+    globalThis.HTMLElement = OriginalHTMLElement;
+  }
+});
+
 test("keyboard listener cleanup and re-registration do not duplicate or retain old state", () => {
   const target = new EventTarget();
   const calls: number[] = [];

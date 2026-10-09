@@ -18,11 +18,17 @@ export interface KeyboardNavigationState {
   focusedPane: FocusedPane;
   commits: CommitNavigationAdapter;
   details: RefObject<DetailNavigationAdapter | null>;
+  focusReferences?: () => void;
 }
 
 export function coordinateNavigation(state: KeyboardNavigationState, key: string, preventDefault: () => void): boolean {
   key = navigationKey(key);
   const { focusedPane, commits } = state;
+  if (focusedPane === "commits" && key === "h" && state.focusReferences) {
+    preventDefault();
+    state.focusReferences();
+    return true;
+  }
   const parent = focusedPane === "files"
     ? parentNavigationAction(focusedPane, key, commits.count, commits.selectedIndex)
     : focusedPane === "commits" && ["j", "k", "Home", "End"].includes(key)
