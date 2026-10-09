@@ -1,4 +1,5 @@
 import type { DiffSegment } from "./diffModel";
+import type { LineAligner } from "./lineAlignment";
 export type InlineChange = { before: DiffSegment[]; after: DiffSegment[] };
 
 const maxLineLength = 4096;
@@ -54,7 +55,7 @@ export function createWordHighlighter() {
   };
 }
 
-export function patchHighlights(patch: string): Map<number, DiffSegment[]> {
+export function patchHighlights(patch: string, align?: LineAligner): Map<number, DiffSegment[]> {
   const highlights = new Map<number, DiffSegment[]>();
   const highlight = createWordHighlighter();
   const lines = patch.split("\n");
@@ -62,10 +63,12 @@ export function patchHighlights(patch: string): Map<number, DiffSegment[]> {
   let added: number[] = [];
   let inHunk = false;
   const flush = () => {
+    const pairs = align ? align(removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : Array.from({ length: Math.min(removed.length, added.length) }, (_, index) => ({ before: index, after: index }));
     if (Math.max(removed.length, added.length) <= maxBlockLines) {
-      for (let i = 0; i < Math.min(removed.length, added.length); i++) {
-        const oldIndex = removed[i]!;
-        const newIndex = added[i]!;
+      for (const pair of pairs) {
+        if (pair.before === undefined || pair.after === undefined) continue;
+        const oldIndex = removed[pair.before]!;
+        const newIndex = added[pair.after]!;
         const change = highlight(lines[oldIndex]!.slice(1), lines[newIndex]!.slice(1));
         if (change) {
           highlights.set(oldIndex, change.before);

@@ -146,6 +146,8 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .panel-heading.diff-heading { flex-wrap: wrap; }
 .panel-heading.diff-heading, .panel-heading.files-heading { padding-block: 5px; }
 .diff-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.pairing-toggle { height: 30px; padding: 0 10px; flex-shrink: 0; white-space: nowrap; }
+.pairing-toggle[aria-pressed="true"] { background: #393b40; color: #dfe1e5; box-shadow: inset 0 0 0 1px #6c7078; }
 .full-file-toggle { flex-shrink: 0; height: 30px; width: 94px; padding: 0 10px; white-space: nowrap; }
 .split-patch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: 12px; line-height: 1.7; tab-size: 4; }
 .split-side { min-width: 0; }

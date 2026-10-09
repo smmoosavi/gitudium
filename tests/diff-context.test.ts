@@ -26,7 +26,7 @@ test("context exposes leading, middle and trailing gaps and merges overlapping e
 test("full-file context preserves source numbering and unified deletion-before-addition ordering", () => {
   const result = expandDiffContext(buildDiffModel(patch), sources, {}, true);
   expect(result.split.filter(row => "gap" in row)).toHaveLength(0);
-  expect(result.split.filter(row => "left" in row)).toHaveLength(60);
+  expect(result.split.filter(row => "left" in row && row.left !== undefined)).toHaveLength(60);
   expect(result.unified.filter(line => line.prefix === " ")).toHaveLength(58);
   expect(result.unified.find(line => line.text === "line 60")).toMatchObject({ prefix: " " });
   const replacement = "@@ -1,2 +1,2 @@\n-old a\n-old b\n+new a\n+new b\n";

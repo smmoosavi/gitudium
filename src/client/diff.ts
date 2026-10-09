@@ -1,9 +1,17 @@
 import type { DiffLine, DiffRow, DiffSegment } from "./diffModel";
+import type { LineAligner } from "./lineAlignment";
 export type { DiffLine, DiffRow } from "./diffModel";
 
 export type DiffMode = "unified" | "split";
 export const diffStorageKey = "gitudium.diff-mode.v1";
 export const wrapStorageKey = "gitudium.diff-wrap.v1";
+export const pairingStorageKey = "gitudium.diff-pairing.v1";
+export function readLinePairing(storage: Pick<Storage, "getItem">): boolean {
+  try { return storage.getItem(pairingStorageKey) === "true"; } catch { return false; }
+}
+export function writeLinePairing(storage: Pick<Storage, "setItem">, enabled: boolean) {
+  try { storage.setItem(pairingStorageKey, String(enabled)); } catch { /* Storage can be blocked or full. */ }
+}
 export function readDiffWrap(storage: Pick<Storage, "getItem">): boolean {
   try { return storage.getItem(wrapStorageKey) === "true"; } catch { return false; }
 }
@@ -24,7 +32,7 @@ export function effectiveDiffMode(mode: DiffMode, status?: string): DiffMode {
   return status === "added" || status === "deleted" ? "unified" : mode;
 }
 
-export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]>): DiffRow[] {
+export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]>, align?: LineAligner): DiffRow[] {
   const rows: DiffRow[] = [];
   let oldNumber = 0;
   let newNumber = 0;
@@ -33,7 +41,9 @@ export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]
   let added: DiffLine[] = [];
   let previous: DiffLine[] = [];
   const flush = () => {
-    for (let i = 0; i < Math.max(removed.length, added.length); i++) rows.push({ left: removed[i], right: added[i] });
+    if (align) {
+      for (const pair of align(removed.map(line => line.text), added.map(line => line.text))) rows.push({ left: pair.before === undefined ? undefined : removed[pair.before], right: pair.after === undefined ? undefined : added[pair.after] });
+    } else for (let i = 0; i < Math.max(removed.length, added.length); i++) rows.push({ left: removed[i], right: added[i] });
     removed = []; added = [];
   };
   const lines = patch.split("\n");
