@@ -1,5 +1,5 @@
 import type { DiffSegment } from "./diffModel";
-import type { LineAligner } from "./lineAlignment";
+import type { LineAligner, LinePair } from "./lineAlignment";
 export type InlineChange = { before: DiffSegment[]; after: DiffSegment[] };
 
 const maxLineLength = 4096;
@@ -58,15 +58,25 @@ export function createWordHighlighter() {
   };
 }
 
-export function patchHighlights(patch: string, align?: LineAligner): Map<number, DiffSegment[]> {
-  const highlights = new Map<number, DiffSegment[]>();
+/** Internal patch-indexed decisions; similarity and inline LCS keep independent patch budgets. */
+export type ChangeBlock = {
+  removed: number[];
+  added: number[];
+  pairs: LinePair[];
+  highlights: Map<number, DiffSegment[]>;
+};
+
+export function patchChangeBlocks(patch: string, align?: LineAligner): ChangeBlock[] {
+  const blocks: ChangeBlock[] = [];
   const highlight = createWordHighlighter();
   const lines = patch.split("\n");
   let removed: number[] = [];
   let added: number[] = [];
   let inHunk = false;
   const flush = () => {
-    const pairs = align ? align(removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : Array.from({ length: Math.min(removed.length, added.length) }, (_, index) => ({ before: index, after: index }));
+    if (!removed.length && !added.length) return;
+    const highlights = new Map<number, DiffSegment[]>();
+    const pairs = align ? align(removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : Array.from({ length: Math.max(removed.length, added.length) }, (_, index) => ({ before: index < removed.length ? index : undefined, after: index < added.length ? index : undefined }));
     if (Math.max(removed.length, added.length) <= maxBlockLines) {
       for (const pair of pairs) {
         if (pair.before === undefined || pair.after === undefined) continue;
@@ -79,6 +89,7 @@ export function patchHighlights(patch: string, align?: LineAligner): Map<number,
         }
       }
     }
+    blocks.push({ removed, added, pairs, highlights });
     removed = []; added = [];
   };
   for (const [index, line] of lines.entries()) {
@@ -97,5 +108,9 @@ export function patchHighlights(patch: string, align?: LineAligner): Map<number,
     }
   }
   flush();
-  return highlights;
+  return blocks;
+}
+
+export function patchHighlights(patch: string, align?: LineAligner): Map<number, DiffSegment[]> {
+  return new Map(patchChangeBlocks(patch, align).flatMap(block => [...block.highlights]));
 }

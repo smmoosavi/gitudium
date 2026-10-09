@@ -1,6 +1,6 @@
-import { splitPatch } from "./diff";
+import { splitChangeBlocks } from "./diff";
 import type { DiffEngine } from "./diffModel";
-import { patchHighlights } from "./wordDiff";
+import { patchChangeBlocks } from "./wordDiff";
 import { createLineAligner } from "./lineAlignment";
 
 export function diffModeChange(patch: string): string | undefined {
@@ -12,7 +12,8 @@ export function diffModeChange(patch: string): string | undefined {
 
 export function createDiffEngine(pairLines = false): DiffEngine {
   return patch => {
-    const highlights = patchHighlights(patch, pairLines ? createLineAligner() : undefined);
+    const blocks = patchChangeBlocks(patch, pairLines ? createLineAligner() : undefined);
+    const highlights = new Map(blocks.flatMap(block => [...block.highlights]));
     let oldNumber: number | undefined;
     let newNumber: number | undefined;
     return {
@@ -36,7 +37,7 @@ export function createDiffEngine(pairLines = false): DiffEngine {
           segments,
         };
       }),
-      split: splitPatch(patch, highlights, pairLines ? createLineAligner() : undefined).map(row => "header" in row && !row.header.startsWith("@@") ? { ...row, metadata: true } : row),
+      split: splitChangeBlocks(patch, blocks).map(row => "header" in row && !row.header.startsWith("@@") ? { ...row, metadata: true } : row),
     };
   };
 }

@@ -1,5 +1,6 @@
 import type { DiffLine, DiffRow, DiffSegment } from "./diffModel";
 import type { LineAligner } from "./lineAlignment";
+import type { ChangeBlock } from "./wordDiff";
 export type { DiffLine, DiffRow } from "./diffModel";
 
 export type DiffMode = "unified" | "split";
@@ -44,7 +45,18 @@ export function effectiveDiffMode(mode: DiffMode, status?: string): DiffMode {
 }
 
 export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]>, align?: LineAligner): DiffRow[] {
+  return splitPatchRows(patch, highlights, align);
+}
+
+/** Engine-only path: consume decisions rather than running a second aligner. */
+export function splitChangeBlocks(patch: string, blocks: ChangeBlock[]): DiffRow[] {
+  return splitPatchRows(patch, undefined, undefined, blocks);
+}
+
+function splitPatchRows(patch: string, highlights?: Map<number, DiffSegment[]>, align?: LineAligner, blocks?: ChangeBlock[]): DiffRow[] {
   const rows: DiffRow[] = [];
+  let blockIndex = 0;
+  const segmentsAt = (index: number) => blocks ? blocks[blockIndex]?.highlights.get(index) : highlights?.get(index);
   let oldNumber = 0;
   let newNumber = 0;
   let inHunk = false;
@@ -52,7 +64,10 @@ export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]
   let added: DiffLine[] = [];
   let previous: DiffLine[] = [];
   const flush = () => {
-    if (align) {
+    if (blocks) {
+      if (!removed.length && !added.length) return;
+      for (const pair of blocks[blockIndex++]!.pairs) rows.push({ left: pair.before === undefined ? undefined : removed[pair.before], right: pair.after === undefined ? undefined : added[pair.after] });
+    } else if (align) {
       for (const pair of align(removed.map(line => line.text), added.map(line => line.text))) rows.push({ left: pair.before === undefined ? undefined : removed[pair.before], right: pair.after === undefined ? undefined : added[pair.after] });
     } else for (let i = 0; i < Math.max(removed.length, added.length); i++) rows.push({ left: removed[i], right: added[i] });
     removed = []; added = [];
@@ -69,11 +84,13 @@ export function splitPatch(patch: string, highlights?: Map<number, DiffSegment[]
     } else if (inHunk && line.startsWith("-")) {
       if (added.length) flush();
       const item: DiffLine = { text: line.slice(1), number: oldNumber++, kind: "deletion" };
-      if (highlights?.has(index)) item.segments = highlights.get(index);
+      const segments = segmentsAt(index);
+      if (segments) item.segments = segments;
       removed.push(item); previous = [item];
     } else if (inHunk && line.startsWith("+")) {
       const item: DiffLine = { text: line.slice(1), number: newNumber++, kind: "addition" };
-      if (highlights?.has(index)) item.segments = highlights.get(index);
+      const segments = segmentsAt(index);
+      if (segments) item.segments = segments;
       added.push(item); previous = [item];
     } else if (inHunk && line.startsWith(" ")) {
       flush();

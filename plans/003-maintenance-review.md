@@ -183,6 +183,24 @@ Validation: `pnpm test tests/syntax-service.test.ts tests/diff-syntax.test.ts` (
 - Alignment work is shared without accidentally widening computation budgets.
 - Existing diff and alignment regression tests pass.
 
+### Implementation update — 2026-10-09
+
+Completed item 6. Internal patch-indexed `ChangeBlock` records retain removed/added indices, pairing decisions, and highlight segments. The engine creates one patch-scoped aligner; unified highlighting and split rows consume the same block results. `DiffEngine`, `createDiffEngine`, existing engines, `splitPatch`, and `patchHighlights` retain their interfaces. No UI/state changes. Empty flushes are skipped (zero candidates/cells); `lineAlignment.ts` and all LCS/candidate limits are unchanged. Similarity and inline highlighting deliberately retain separate word-highlighter budgets; similarity results are not reused as inline highlights, which would widen the latter's effective budget.
+
+Characterization adds 16 fixtures with baseline SHA-256 hashes for both engine modes: repeated lines, interleaved/empty/context newline markers, alternating changes/hunks, Unicode/punctuation, long/oversized blocks, and cumulative candidate/similarity/inline exhaustion. Tests pin exact exhaustion behavior (24 costly matches, then fallback) and shared segment identity. Before removing independent legacy copies from baseline `b5b4d42`, 1,038 old/new model comparisons passed `isDeepStrictEqual`: 19 named fixtures in both modes plus 500 seeded multi-hunk patches in both modes. Legacy copies were removed; output hashes remain as permanent regressions.
+
+Paired-mode benchmark (`pnpm exec bun scripts/benchmark-diff.ts <baseline-module-path>`, Bun 1.4.0, this Linux host): 20 warmups, 9 alternating-order samples of 20 evaluations, median milliseconds per complete engine evaluation:
+
+| Fixture | Legacy | Shared blocks | Speedup |
+| --- | ---: | ---: | ---: |
+| 32 related replacement lines + setup insertion | 17.251 | 8.564 | 2.01× |
+| 32 small change blocks | 2.254 | 1.316 | 1.71× |
+| Inline/candidate-exhausted workload | 8.901 | 8.874 | 1.00× |
+
+The exhausted case honestly shows negligible benefit when the old second alignment already falls back. Timings are local synthetic evidence, not a browser/end-user latency guarantee. The script checks benchmark output equivalence when supplied a baseline module; baseline modules can be reconstructed from the three original files (`diffEngine.ts`, `diff.ts`, `wordDiff.ts`) at `b5b4d42`, redirecting their internal imports to the baseline copies. Current-only timing remains runnable without retaining legacy production code.
+
+Validation: 60 targeted tests across diff engine/client/context/syntax/alignment passed; `pnpm run typecheck`, `pnpm run build`, all 8 Chromium mounted browser tests, and `git diff --check` passed. README documents sharing, unchanged budgets/fallbacks, and benchmark invocation. Limits: this refactor removes duplicated alignment, not repeated patch scanning, whole-patch parsing, or rendering costs; no unrelated scalability/UI/state work was included.
+
 ## 7. Measure scalability beyond row virtualization
 
 **Priority: Medium — measurement-led performance work.**
