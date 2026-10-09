@@ -4,7 +4,7 @@ export type DiffSegment = { text: string; changed: boolean; color?: string };
 export type DiffLine = { text: string; number?: number; kind: "context" | "addition" | "deletion"; noNewline?: boolean; segments?: DiffSegment[] };
 export type DiffContextGap = { id: string; count: number };
 export type DiffRow = { header: string; metadata?: boolean } | { gap: DiffContextGap } | { left?: DiffLine; right?: DiffLine };
-export type UnifiedDiffLine = { text: string; metadata?: boolean; oldNumber?: number; newNumber?: number; prefix?: string; kind?: "addition" | "deletion" | "hunk"; segments?: DiffSegment[]; gap?: DiffContextGap };
+export type UnifiedDiffLine = { text: string; noNewline?: boolean; metadata?: boolean; oldNumber?: number; newNumber?: number; prefix?: string; kind?: "addition" | "deletion" | "hunk"; segments?: DiffSegment[]; gap?: DiffContextGap };
 
 /** Plain render data: segment text concatenates to line text; undefined segments mean whole-line fallback. */
 export interface DiffModel {

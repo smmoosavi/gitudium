@@ -59,12 +59,12 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 3 — Unified line numbers and cleaner headers
 
-- [ ] Add old/new line-number gutters to unified mode.
+- [x] Add old/new line-number gutters to unified mode.
 - [x] Match the file-diff and Changed files headers' single-row height to other panel headers: 30 px controls, 5 px vertical padding, and a 1 px border (41 px total); allow wrapping when space is limited.
 - [x] Separate patch metadata from code rows instead of styling file headers as additions/deletions. Raw metadata is hidden in both modes; rename/copy paths and changed file modes remain compact title details.
 - [x] Hide raw `@@` hunk headers in both modes; use line-number gutters for locations (unified gutters are next).
-- [ ] Keep gutters aligned with wrapped lines and support accurate missing-final-newline indicators in both modes.
-- [ ] Test multiple hunks, empty ranges, added/deleted files, and metadata-only changes.
+- [x] Keep gutters aligned with wrapped lines and support accurate missing-final-newline indicators in both modes. Fixed grid columns keep continuation lines inside the code column; unified newline markers have blank gutters.
+- [x] Test multiple hunks, empty ranges, added/deleted files, and metadata-only changes. Targeted renderer/context/syntax suite: 32 tests passed; typecheck passed.
 
 **Outcome:** Both modes provide clear locations and consistent presentation.
 

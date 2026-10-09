@@ -96,7 +96,7 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
   const unified: UnifiedDiffLine[] = [];
   const appendLine = (line: DiffLine, prefix: string, newNumber = line.number) => {
     unified.push({ text: line.text, prefix, oldNumber: prefix !== "+" ? line.number : undefined, newNumber: prefix !== "-" ? newNumber : undefined, kind: line.kind === "context" ? undefined : line.kind, segments: line.segments });
-    if (line.noNewline) unified.push({ text: "\\ No newline at end of file" });
+    if (line.noNewline) unified.push({ text: "\\ No newline at end of file", noNewline: true });
   };
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;

@@ -33,7 +33,14 @@ export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansio
   const contextModel = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full) : pendingDiffContext(base), [base, sources, expansion, full]);
   const model = useMemo(() => applyDiffSyntax(contextModel, syntax), [contextModel, syntax]);
   const rows = model.split.filter(row => !("header" in row));
-  if (mode === "unified") return <pre className={`patch${wrap ? " wrap-lines" : ""}`} aria-label="File diff"><code>{model.unified.filter(line => !line.metadata && line.kind !== "hunk").map((line, index) => <span key={index} className={line.gap ? "context-gap-row" : line.kind}>{line.gap ? gapControls(line.gap, onExpand) : <>{line.prefix}{inlineText(line.text, line.segments)}</>}</span>)}</code></pre>;
+  if (mode === "unified") return <pre className={`patch${wrap ? " wrap-lines" : ""}`} aria-label="File diff"><code>{model.unified.filter(line => !line.metadata && line.kind !== "hunk").map((line, index) => <span key={index} className={line.gap ? "context-gap-row" : `unified-line ${line.kind ?? "context"}`}>
+    {line.gap ? gapControls(line.gap, onExpand) : <>
+      <span className="line-number old-line-number" aria-hidden="true">{line.oldNumber ?? " "}</span>
+      <span className="line-number new-line-number" aria-hidden="true">{line.newNumber ?? " "}</span>
+      <span className="diff-prefix" aria-hidden="true">{line.prefix ?? " "}</span>
+      <span className={`line-content${line.noNewline ? " no-newline" : ""}`}>{inlineText(line.text, line.segments)}</span>
+    </>}
+  </span>)}</code></pre>;
   return <div className={`split-patch${wrap ? " wrap-lines" : ""}`} style={wrap ? { gridTemplateRows: `auto repeat(${rows.length}, auto)` } : undefined} aria-label="Side-by-side file diff">
     {(["left", "right"] as const).map(side => <div className="split-side" style={wrap ? { gridRow: `1 / span ${rows.length + 1}` } : undefined} key={side} role="region" aria-label={side === "left" ? "Before changes" : "After changes"} tabIndex={0}>
       <div className="split-title">{side === "left" ? "Before" : "After"}</div>
@@ -41,7 +48,7 @@ export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansio
         if ("header" in row) return null;
         if ("gap" in row) return <span className="split-line context-gap-row" key={index}>{side === "left" ? gapControls(row.gap, onExpand) : <span className="context-gap"><span className="context-gap-label">{row.gap.count} hidden lines</span></span>}</span>;
         const line = row[side];
-        return <span className={`split-line ${line?.kind ?? "placeholder"}`} key={index}><span className="line-number" aria-hidden="true">{line?.number ?? " "}</span>{inlineText(line?.text ?? "", line?.segments)}{line?.noNewline && <span className="no-newline" title="No newline at end of file"> ⏎ No newline at end of file</span>}</span>;
+        return <span className={`split-line ${line?.kind ?? "placeholder"}`} key={index}><span className="line-number" aria-hidden="true">{line?.number ?? " "}</span><span className="line-content">{inlineText(line?.text ?? "", line?.segments)}{line?.noNewline && <span className="no-newline" title="No newline at end of file"> ⏎ No newline at end of file</span>}</span></span>;
       })}</code></pre>
     </div>)}
   </div>;

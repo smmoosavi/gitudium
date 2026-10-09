@@ -48,6 +48,31 @@ test("full-file control reserves stable toolbar space while source loads", async
   expect(view).not.toContain('aria-hidden={!textSources');
 });
 
+test("unified gutters use independent old/new coordinates across hunks and empty ranges", () => {
+  const patch = "@@ -1,2 +1,3 @@\n same\n-old\n+new\n+extra\n@@ -10,0 +12 @@\n+inserted\n\\ No newline at end of file\n";
+  const model = buildDiffModel(patch);
+  expect(model.unified.filter(line => line.prefix).map(line => [line.oldNumber, line.newNumber])).toEqual([[1, 1], [2, undefined], [undefined, 2], [undefined, 3], [undefined, 12]]);
+  for (const wrap of [false, true]) {
+    const html = renderToStaticMarkup(createElement(DiffPatch, { patch, mode: "unified", wrap }));
+    expect(html).toContain('class="line-number old-line-number" aria-hidden="true">2</span>');
+    expect(html).toContain('class="line-number new-line-number" aria-hidden="true">12</span>');
+    expect(html).toContain('class="line-content no-newline"');
+    expect(html).not.toContain("@@");
+  }
+  for (const patch of ["@@ -0,0 +1 @@\n+\n", "@@ -1 +0,0 @@\n-\n"]) {
+    const html = renderToStaticMarkup(createElement(DiffPatch, { patch, mode: "unified" }));
+    expect(html).toContain('aria-hidden="true">1</span>');
+    expect(html).not.toContain('aria-hidden="true">0</span>');
+  }
+});
+
+test("wrapped code keeps gutters in separate fixed grid columns in both modes", async () => {
+  const css = await Bun.file(new URL("../src/client/style.css", import.meta.url)).text();
+  expect(css).toContain("grid-template-columns: 6ch 6ch 2ch minmax(0, 1fr)");
+  expect(css).toContain("grid-template-columns: 6ch minmax(0, 1fr)");
+  expect(css).toContain(".patch.wrap-lines .line-content { white-space: pre-wrap;");
+});
+
 test("wrapping defaults off and persists safely", () => {
   let saved: string | null = null;
   const storage = { getItem: () => saved, setItem: (key: string, value: string) => { expect(key).toBe(wrapStorageKey); saved = value; } };

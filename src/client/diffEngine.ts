@@ -27,8 +27,9 @@ export const defaultDiffEngine: DiffEngine = patch => {
       return {
         ...location,
         metadata: !hunk && oldNumber === undefined,
-        text: segments ? line.slice(1) : line,
-        prefix: segments ? line[0] : undefined,
+        noNewline: line === "\\ No newline at end of file" || undefined,
+        text: location.oldNumber !== undefined || location.newNumber !== undefined ? line.slice(1) : line,
+        prefix: location.oldNumber !== undefined || location.newNumber !== undefined ? line[0] : undefined,
         kind: line.startsWith("+") ? "addition" : line.startsWith("-") ? "deletion" : line.startsWith("@@") ? "hunk" : undefined,
         segments,
       };
