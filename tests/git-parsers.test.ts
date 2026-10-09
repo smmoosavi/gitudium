@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "../src/repository/parsers";
+import { parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles, parseNumstat } from "../src/repository/parsers";
 
 const fields = ["commit", "short", "parent1 parent2", "", "Name", "mail", "2026-01-01T00:00:00Z"];
 const record = (values: string[]) => values.join("\0") + "\0";
@@ -42,6 +42,29 @@ test("changed-file parser preserves literal whitespace, Unicode and option-like 
   expect(parseChangedFiles("")).toEqual([]);
   for (const status of ["R100", "toString", "__proto__"]) {
     expect(() => parseChangedFiles(record([status, "file"]))).toThrow("Unsupported changed-file status.");
+  }
+});
+
+test("numstat preserves literal paths and maps renames and copies by destination", () => {
+  expect([...parseNumstat(record([
+    "12\t3\t-odd\tline\n☃", "0\t0\t", "old\t\nname", "new\t\nname",
+    "2\t1\t", "source", "copy", "-\t-\tbinary", "0\t5\tdeleted",
+  ]))]).toEqual([
+    ["-odd\tline\n☃", { additions: 12, deletions: 3 }],
+    ["new\t\nname", { additions: 0, deletions: 0 }],
+    ["copy", { additions: 2, deletions: 1 }],
+    ["binary", { additions: null, deletions: null }],
+    ["deleted", { additions: 0, deletions: 5 }],
+  ]);
+  expect(parseNumstat("").size).toBe(0);
+});
+
+test("numstat rejects malformed counts and truncated rename records", () => {
+  for (const output of ["1\t0\tfile", "1\t0\t\0source\0", "1\t0\t\0\0dest\0",
+    "-\t1\tfile\0", "1\t-\tfile\0", "NaN\t0\tfile\0", "1.5\t0\tfile\0",
+    "-1\t0\tfile\0", "9007199254740992\t0\tfile\0", "1\t0\tfile\0extra\0",
+    "1\t0\tfile\0".repeat(2)]) {
+    expect(() => parseNumstat(output)).toThrow("Malformed Git output.");
   }
 });
 

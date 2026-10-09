@@ -6,7 +6,7 @@ import type {
   HistoryQuery, Reference, RepositoryMetadata, RepositoryReader, SourceFile, SourceResult,
 } from "./types";
 
-import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles } from "./parsers";
+import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
 import { GitRunner, MAX_OUTPUT } from "./runner";
 import { isRevision, isHistoryExpression, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
@@ -188,8 +188,16 @@ export class GitRepositoryReader implements RepositoryReader {
 
   private async files(id: string, signal?: AbortSignal): Promise<ChangedFile[]> {
     const comparison = await this.comparison(id, signal);
-    const output = await this.run(["diff-tree", "--root", "--no-commit-id", "-r", "--name-status", "-z", "--no-ext-diff", "--no-textconv", "--find-renames", "--find-copies", "--find-copies-harder", "-l1000", ...comparison, "--"], signal);
-    return parseChangedFiles(output);
+    const args = ["diff-tree", "--root", "--no-commit-id", "-r", "-z", "--no-ext-diff", "--no-textconv", "--find-renames", "--find-copies", "--find-copies-harder", "-l1000"];
+    const output = await this.run([...args, "--name-status", ...comparison, "--"], signal);
+    const counts = parseNumstat(await this.run([...args, "--numstat", ...comparison, "--"], signal));
+    const files = parseChangedFiles(output);
+    if (files.length !== counts.size) throw new RepositoryError("GIT_FAILED", "Inconsistent Git file counts.");
+    return files.map(file => {
+      const count = counts.get(file.path);
+      if (!count) throw new RepositoryError("GIT_FAILED", "Missing Git file counts.");
+      return { ...file, ...count };
+    });
   }
 
   async commit(revision: string, signal?: AbortSignal): Promise<CommitDetails> {

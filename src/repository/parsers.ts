@@ -61,6 +61,32 @@ export function parseDetails(output: string, refs: Map<string, string[]>): Omit<
     message: fields[10], diffBase: commit.parents[0] ?? null };
 }
 
+export function parseNumstat(output: string): Map<string, { additions: number | null; deletions: number | null }> {
+  const counts = new Map<string, { additions: number | null; deletions: number | null }>();
+  if (!output) return counts;
+  if (!output.endsWith("\0")) malformed();
+  const fields = output.slice(0, -1).split("\0");
+  for (let i = 0; i < fields.length;) {
+    // Only the first two tabs delimit counts; literal paths can contain tabs and newlines.
+    const match = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(fields[i++]);
+    if (!match) malformed();
+    let path = match[3];
+    if (!path) {
+      // Renames and copies have an empty inline path followed by source and destination.
+      const source = fields[i++];
+      path = fields[i++];
+      if (!source || !path) malformed();
+    }
+    const binary = match[1] === "-";
+    if (binary !== (match[2] === "-")) malformed();
+    const additions = binary ? null : Number(match[1]);
+    const deletions = binary ? null : Number(match[2]);
+    if ((!binary && (!Number.isSafeInteger(additions) || !Number.isSafeInteger(deletions))) || counts.has(path)) malformed();
+    counts.set(path, { additions, deletions });
+  }
+  return counts;
+}
+
 export function parseChangedFiles(output: string): ChangedFile[] {
   if (!output) return [];
   if (!output.endsWith("\0")) malformed();

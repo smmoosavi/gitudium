@@ -82,7 +82,7 @@ test("all-ref topological history returns parents and decorations with snapshot 
   expect(remaining.commits.find(item => item.id === root)?.references).toContain("refs/tags/v1");
   const details = await reader.commit(merge);
   expect(details.diffBase).toBe(main);
-  expect(details.files).toEqual([{ path: "side", previousPath: null, status: "added" }]);
+  expect(details.files).toEqual([{ path: "side", previousPath: null, status: "added", additions: 1, deletions: 0 }]);
   const diff = await reader.diff(merge);
   expect(diff.state).toBe("text");
   if (diff.state === "text") {
@@ -236,7 +236,44 @@ test("root commits, unusual literal paths, binary and oversized diffs", async ()
   await git(path, "mv", "--", name, "renamed");
   await git(path, "commit", "-m", "rename");
   const rename = await reader.commit("HEAD");
-  expect(rename.files).toEqual([{ path: "renamed", previousPath: name, status: "renamed" }]);
+  expect(rename.files).toEqual([{ path: "renamed", previousPath: name, status: "renamed", additions: 0, deletions: 0 }]);
+});
+
+test("per-file counts cover roots, modifications, deletions, binary and literal rename/copy destinations", async () => {
+  const path = await fixture();
+  const original = "-original\t\n☃";
+  const renamed = "renamed\n\t☃";
+  const copied = "copy\t\n☃";
+  await writeFile(join(path, original), "one\ntwo\nthree\n");
+  await writeFile(join(path, "deleted"), "gone\naway\n");
+  await writeFile(join(path, "binary"), new Uint8Array([0, 1, 2]));
+  await git(path, "add", "--all");
+  await git(path, "commit", "-m", "root counts");
+  const reader = await GitRepositoryReader.discover(path);
+  expect((await reader.commit("HEAD")).files).toEqual([
+    { path: original, previousPath: null, status: "added", additions: 3, deletions: 0 },
+    { path: "binary", previousPath: null, status: "added", additions: null, deletions: null },
+    { path: "deleted", previousPath: null, status: "added", additions: 2, deletions: 0 },
+  ]);
+  await writeFile(join(path, original), "one\nreplacement\nthree\nfour\n");
+  await writeFile(join(path, "binary"), new Uint8Array([0, 3, 4]));
+  await git(path, "rm", "--", "deleted");
+  await git(path, "add", "--all");
+  await git(path, "commit", "-m", "modify and delete");
+  expect((await reader.commit("HEAD")).files).toEqual([
+    { path: original, previousPath: null, status: "modified", additions: 2, deletions: 1 },
+    { path: "binary", previousPath: null, status: "modified", additions: null, deletions: null },
+    { path: "deleted", previousPath: null, status: "deleted", additions: 0, deletions: 2 },
+  ]);
+  await git(path, "mv", "--", original, renamed);
+  await git(path, "commit", "-m", "pure rename");
+  expect((await reader.commit("HEAD")).files).toEqual([
+    { path: renamed, previousPath: original, status: "renamed", additions: 0, deletions: 0 },
+  ]);
+  await commit(path, copied, "one\nreplacement\nthree\nfour\n", "pure copy");
+  expect((await reader.commit("HEAD")).files).toEqual([
+    { path: copied, previousPath: renamed, status: "copied", additions: 0, deletions: 0 },
+  ]);
 });
 
 test("linked worktrees, detached HEAD and bare repositories", async () => {
@@ -376,7 +413,7 @@ test("sources preserve root, modification, rename, copy and deletion sides with 
     after: { revision: renamed, path: "-renamed\nfile", text: "modified\n" } });
   await expect(reader.sources(renamed, name)).rejects.toMatchObject({ code: "INVALID_INPUT" });
   const copied = await commit(path, "copy", "modified\n", "copy");
-  expect((await reader.commit(copied)).files).toEqual([{ path: "copy", previousPath: "-renamed\nfile", status: "copied" }]);
+  expect((await reader.commit(copied)).files).toEqual([{ path: "copy", previousPath: "-renamed\nfile", status: "copied", additions: 0, deletions: 0 }]);
   expect(await reader.sources(copied, "copy")).toEqual({ state: "text",
     before: { revision: renamed, path: "-renamed\nfile", text: "modified\n" },
     after: { revision: copied, path: "copy", text: "modified\n" } });

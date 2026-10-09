@@ -58,6 +58,9 @@ export interface ChangedFile {
   path: string;
   previousPath: string | null;
   status: "added" | "modified" | "deleted" | "renamed" | "copied" | "type-changed";
+  /** Line counts against the first parent (or empty tree); null denotes binary files. */
+  additions?: number | null;
+  deletions?: number | null;
 }
 
 export interface CommitDetails extends CommitSummary {

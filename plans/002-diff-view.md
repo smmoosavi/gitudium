@@ -108,7 +108,7 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 8 — File summary, search, and clean copying
 
-- [ ] Show per-file addition/deletion counts, status, and old → new paths for renames.
+- [x] Show per-file addition/deletion counts, status, and old → new paths for renames. Counts are fetched together using Git numstat (not per-file patches), shown in list/tree and the selected diff title; binary files show Binary instead of zero counts. This iteration covers file summaries only; search and copying remain below.
 - [ ] Add search within the displayed diff, with highlighted matches and next/previous navigation.
 - [ ] Define whether search includes metadata, hidden context, and whitespace-filtered content.
 - [ ] Provide clean copying without gutters or diff markers, including explicit “Copy before/after” actions.

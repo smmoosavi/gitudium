@@ -43,6 +43,26 @@ test("list and tree preserve selection and status, with collapsible tree folders
   }
 });
 
+test("file summaries show counts, binary state and previous paths in both layouts", () => {
+  const changed: ChangedFile[] = [
+    { path: "src/new.ts", previousPath: "old/<name>.ts", status: "renamed", additions: 3, deletions: 2 },
+    { path: "image.png", previousPath: null, status: "modified", additions: null, deletions: null },
+    { path: "zero.ts", previousPath: null, status: "added", additions: 0, deletions: 0 },
+    { path: "legacy.ts", previousPath: null, status: "modified" },
+  ];
+  for (const mode of ["list", "tree"] as const) {
+    const html = renderToStaticMarkup(createElement(ChangedFiles, { files: changed, mode, selected: null, onSelect: () => {} }));
+    expect(html).toContain("3 lines added, 2 lines deleted");
+    expect(html).toContain("+3</span>");
+    expect(html).toContain("−2</span>");
+    expect(html).toContain("0 lines added, 0 lines deleted");
+    expect(html).toContain("Binary file; line counts unavailable");
+    expect(html).toContain("old/&lt;name&gt;.ts");
+    expect(html).not.toContain("<name>");
+    expect(html).not.toContain("undefined");
+  }
+});
+
 test("file view preference persists with safe storage fallback", () => {
   let stored: string | null = null;
   const storage = { getItem: () => stored, setItem: (key: string, value: string) => { expect(key).toBe(filesStorageKey); stored = value; } };

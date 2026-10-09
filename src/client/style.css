@@ -136,6 +136,11 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .file-status.added { color: #91c499; }
 .file-status.deleted { color: #ed9690; }
 .file-kind { margin-left: auto; color: var(--muted); font-size: 11px; }
+.previous-path { color: var(--muted); }
+.file-change-summary { display: inline-flex; gap: 6px; flex-shrink: 0; white-space: nowrap; font: normal 11px monospace; color: var(--muted); }
+.diff-heading .file-change-summary { margin-left: 8px; }
+.added-count { color: #91c499; }
+.deleted-count { color: #ed9690; }
 .diff-heading h3 { overflow-wrap: anywhere; min-width: 0; }
 .diff-file-detail { margin-left: 8px; font-size: 11px; font-weight: normal; color: var(--muted); }
 .panel-heading.diff-heading { flex-wrap: wrap; }
