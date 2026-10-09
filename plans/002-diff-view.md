@@ -60,8 +60,9 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 ### Step 3 — Unified line numbers and cleaner headers
 
 - [ ] Add old/new line-number gutters to unified mode.
-- [ ] Separate patch metadata from code rows instead of styling file headers as additions/deletions.
-- [ ] Show compact hunk location labels and function names when supplied by Git.
+- [x] Match the file-diff and Changed files headers' single-row height to other panel headers: 30 px controls, 5 px vertical padding, and a 1 px border (41 px total); allow wrapping when space is limited.
+- [x] Separate patch metadata from code rows instead of styling file headers as additions/deletions. Raw metadata is hidden in both modes; rename/copy paths and changed file modes remain compact title details.
+- [x] Hide raw `@@` hunk headers in both modes; use line-number gutters for locations (unified gutters are next).
 - [ ] Keep gutters aligned with wrapped lines and support accurate missing-final-newline indicators in both modes.
 - [ ] Test multiple hunks, empty ranges, added/deleted files, and metadata-only changes.
 
@@ -79,7 +80,7 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 5 — Expandable context
 
-- [x] Add “Show more above/below” controls between hunks and an optional full-file view.
+- [x] Add “Show more above/below” controls between hunks and an optional full-file view. Infer leading/inter-hunk gaps from the patch immediately to prevent loading shifts; trailing gaps require source length. Keep Full file visible during loading and queue early expansion/full-file requests against the existing source query.
 - [x] Provide complete before/after text retrieval for files within explicit size limits; the existing patch alone cannot supply omitted context. Reuse this source data for step 2's multiline-correct highlighting, independent of which context rows are currently expanded.
 - [x] Resolve exact comparison revisions and old/new paths, including renames, first-parent merges, root commits, and absent sides of added/deleted files.
 - [x] Design bounded, cancellable source retrieval and caching while preserving binary and size safeguards. Do not load arbitrarily large files into memory or delay the initial patch display.
@@ -160,6 +161,8 @@ Validation:
 - Isolated full-application browser fixture: verified a middle-gap expansion from 53 to 33 hidden lines, full 100-line source display, split/wrapped row alignment, Hunks only restoration, and root-commit navigation resetting full-view state while preserving added-file unified rendering.
 
 UI refinement: context controls use compact gutter icons with accessible labels/tooltips. Gaps of 20 lines or fewer show one expand-all button; larger gaps show two directional buttons. Both split sides use the same 40 px gap-row height and full-width background with no trailing padding. Validation: 22 focused tests and typecheck passed; browser measurements verified equal heights, aligned rows and zero unused right-side space in wrapped and unwrapped split layouts.
+
+Toolbar follow-up: the Full file/Hunks only control uses a fixed 30 px height matching adjacent controls and reserves its width while source is loading or unavailable. Hidden controls are excluded from keyboard focus and accessibility exposure, avoiding toolbar reflow as source data arrives. Diff/context loading text and the added/deleted forced-unified notice are omitted to avoid transient layout shifts; errors and size/unavailable safeguards remain visible, and added/deleted files still render unified. Focused renderer tests and typecheck passed.
 
 ### Step 2 — Implemented on 2026-10-09
 

@@ -3,8 +3,50 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DiffPatch } from "../src/client/DiffPatch";
 import { buildDiffModel, type DiffEngine } from "../src/client/diffModel";
+import { diffModeChange } from "../src/client/diffEngine";
 import { createWordHighlighter, patchHighlights } from "../src/client/wordDiff";
 import { diffStorageKey, effectiveDiffMode, readDiffMode, splitPatch, writeDiffMode, readDiffWrap, writeDiffWrap, wrapStorageKey } from "../src/client/diff";
+
+test("raw metadata and hunk headers are hidden in both modes while source remains visible", () => {
+  const patch = "diff --git a/old b/new\nold mode 100644\nnew mode 100755\nindex abc..def\n--- a/old\n+++ b/new\n@@ -1 +1 @@\n-old\n+new\n";
+  expect(diffModeChange(patch)).toBe("Mode 100644 → 100755");
+  expect(diffModeChange("@@ -1 +1 @@\n-old mode 100644\n+new mode 100755\n")).toBeUndefined();
+  for (const mode of ["unified", "split"] as const) {
+    for (const sources of [undefined, { before: { text: "old\n" }, after: { text: "new\n" } }]) {
+      const html = renderToStaticMarkup(createElement(DiffPatch, { patch, mode, sources }));
+      expect(html).not.toContain("diff --git");
+      expect(html).not.toContain("index abc");
+      expect(html).not.toContain("100644");
+      expect(html).not.toContain("a/old");
+      expect(html).not.toContain("@@");
+      expect(html).toContain("new");
+    }
+  }
+});
+
+test("leading and intermediate gaps appear before sources and queued expansion applies on arrival", () => {
+  const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n") + "\n";
+  const after = text.replace("line 61\n", "changed\n");
+  const patch = "@@ -60,3 +60,3 @@\n line 60\n-line 61\n+changed\n line 62\n@@ -90 +90 @@\n line 90\n";
+  for (const mode of ["unified", "split"] as const) {
+    const pending = renderToStaticMarkup(createElement(DiffPatch, { patch, mode, onExpand: () => {} }));
+    expect(pending).toContain("59 hidden lines");
+    expect(pending).toContain("27 hidden lines");
+    const ready = renderToStaticMarkup(createElement(DiffPatch, { patch, mode, sources: { before: { text }, after: { text: after } }, expansion: { "1:1:59": { above: 20, below: 0 } } }));
+    expect(ready).toContain("39 hidden lines");
+    expect(ready).toContain("line 1");
+    expect(ready).toContain("27 hidden lines");
+  }
+});
+
+test("full-file control reserves stable toolbar space while source loads", async () => {
+  const css = await Bun.file(new URL("../src/client/style.css", import.meta.url)).text();
+  expect(css).toContain(".full-file-toggle { flex-shrink: 0; height: 30px; width: 94px;");
+  expect(css).toContain(".panel-heading.diff-heading, .panel-heading.files-heading { padding-block: 5px; }");
+  const view = await Bun.file(new URL("../src/client/CommitView.tsx", import.meta.url)).text();
+  expect(view).toContain('className="full-file-toggle"');
+  expect(view).not.toContain('aria-hidden={!textSources');
+});
 
 test("wrapping defaults off and persists safely", () => {
   let saved: string | null = null;
@@ -23,8 +65,8 @@ test("wrapped split rows share grid tracks to retain alignment", () => {
     const html = renderToStaticMarkup(createElement(DiffPatch, { patch, mode, wrap: true }));
     expect(html).toContain("wrap-lines");
     if (mode === "split") {
-      expect(html).toContain("grid-template-rows:auto repeat(2, auto)");
-      expect(html.match(/grid-row:1 \/ span 3/g)?.length).toBe(2);
+      expect(html).toContain("grid-template-rows:auto repeat(1, auto)");
+      expect(html.match(/grid-row:1 \/ span 2/g)?.length).toBe(2);
     }
     expect(renderToStaticMarkup(createElement(DiffPatch, { patch, mode }))).not.toContain("wrap-lines");
   }
@@ -180,5 +222,5 @@ test("default diff model preserves unified patch text and split parser behavior"
   for (const line of model.unified) {
     if (line.segments) expect(line.segments.map(segment => segment.text).join("")).toBe(line.text);
   }
-  expect(model.split).toEqual(splitPatch(patch, patchHighlights(patch)));
+  expect(model.split.map(row => "header" in row ? { header: row.header } : row)).toEqual(splitPatch(patch, patchHighlights(patch)));
 });

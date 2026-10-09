@@ -137,8 +137,11 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .file-status.deleted { color: #ed9690; }
 .file-kind { margin-left: auto; color: var(--muted); font-size: 11px; }
 .diff-heading h3 { overflow-wrap: anywhere; min-width: 0; }
-.diff-heading { flex-wrap: wrap; }
+.diff-file-detail { margin-left: 8px; font-size: 11px; font-weight: normal; color: var(--muted); }
+.panel-heading.diff-heading { flex-wrap: wrap; }
+.panel-heading.diff-heading, .panel-heading.files-heading { padding-block: 5px; }
 .diff-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.full-file-toggle { flex-shrink: 0; height: 30px; width: 94px; padding: 0 10px; white-space: nowrap; }
 .split-patch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: 12px; line-height: 1.7; tab-size: 4; }
 .split-side { min-width: 0; }
 .split-side + .split-side { border-left: 1px solid var(--border); }

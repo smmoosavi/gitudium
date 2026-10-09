@@ -13,6 +13,38 @@ function sourceLines(text?: string) {
   return lines;
 }
 
+export function pendingDiffContext(base: DiffModel): DiffModel {
+  const inferGaps = () => {
+    let oldNext = 1;
+    let newNext = 1;
+    return (header: string): ContextGap | undefined => {
+      const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(header);
+      if (!match) return;
+      const oldCount = Number(match[2] ?? 1);
+      const newCount = Number(match[4] ?? 1);
+      const oldStart = Number(match[1]) + (oldCount === 0 ? 1 : 0);
+      const newStart = Number(match[3]) + (newCount === 0 ? 1 : 0);
+      const count = oldStart - oldNext;
+      const gap = count > 0 && count === newStart - newNext ? { id: `${oldNext}:${newNext}:${count}`, count } : undefined;
+      oldNext = oldStart + oldCount;
+      newNext = newStart + newCount;
+      return gap;
+    };
+  };
+  const splitGap = inferGaps();
+  const unifiedGap = inferGaps();
+  return {
+    split: base.split.flatMap((row): DiffRow[] => {
+      const gap = "header" in row ? splitGap(row.header) : undefined;
+      return gap ? [{ gap }, row] : [row];
+    }),
+    unified: base.unified.flatMap((line): UnifiedDiffLine[] => {
+      const gap = line.kind === "hunk" && !line.metadata ? unifiedGap(line.text) : undefined;
+      return gap ? [{ text: "", gap }, line] : [line];
+    }),
+  };
+}
+
 export function expandDiffContext(base: DiffModel, sources: ContextSources, expansion: ContextExpansion, full = false): DiffModel {
   const before = sourceLines(sources.before?.text);
   const after = sourceLines(sources.after?.text);
@@ -68,7 +100,7 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
   };
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
-    if ("header" in row) unified.push({ text: row.header, kind: "hunk" });
+    if ("header" in row) unified.push({ text: row.header, kind: "hunk", metadata: row.metadata });
     else if ("gap" in row) unified.push({ text: "", gap: row.gap });
     else if (row.left?.kind === "context") appendLine(row.left, " ", row.right?.number);
     else {

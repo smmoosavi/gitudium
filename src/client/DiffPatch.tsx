@@ -10,7 +10,7 @@ function inlineText(text: string, segments?: DiffSegment[]) {
     : segment.color ? <span className="syntax-token" style={{ color: segment.color }} key={index}>{segment.text}</span> : segment.text) : text || " ";
 }
 
-import { contextPageSize, expandDiffContext, type ContextSources, type ContextExpansion, type ContextGap } from "./diffContext";
+import { contextPageSize, pendingDiffContext, expandDiffContext, type ContextSources, type ContextExpansion, type ContextGap } from "./diffContext";
 
 function expandIcon(direction: "above" | "below" | "all") {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -23,22 +23,22 @@ function expandIcon(direction: "above" | "below" | "all") {
 function gapControls(gap: ContextGap, onExpand?: (id: string, direction: "above" | "below") => void) {
   const compact = gap.count <= contextPageSize;
   return <span className="context-gap"><span className={`context-gap-actions${compact ? " single" : ""}`}>
-    <button type="button" aria-label={compact ? "Show all hidden lines" : "Show more below"} title={compact ? "Show all hidden lines" : "Show more below"} onClick={() => onExpand?.(gap.id, "above")}>{expandIcon(compact ? "all" : "above")}</button>
-    {!compact && <button type="button" aria-label="Show more above" title="Show more above" onClick={() => onExpand?.(gap.id, "below")}>{expandIcon("below")}</button>}
+    <button type="button" aria-label={compact ? "Show all hidden lines" : "Show more below"} title={compact ? "Show all hidden lines" : "Show more below"} disabled={!onExpand} onClick={() => onExpand?.(gap.id, "above")}>{expandIcon(compact ? "all" : "above")}</button>
+    {!compact && <button type="button" aria-label="Show more above" title="Show more above" disabled={!onExpand} onClick={() => onExpand?.(gap.id, "below")}>{expandIcon("below")}</button>}
   </span><span className="context-gap-label">{gap.count} hidden lines</span></span>;
 }
 
 export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansion = {}, full = false, onExpand, syntax }: { syntax?: SyntaxResult; patch: string; mode: DiffMode; wrap?: boolean; engine?: DiffEngine; sources?: ContextSources; expansion?: ContextExpansion; full?: boolean; onExpand?: (id: string, direction: "above" | "below") => void }) {
   const base = useMemo(() => buildDiffModel(patch, engine), [patch, engine]);
-  const contextModel = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full) : base, [base, sources, expansion, full]);
+  const contextModel = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full) : pendingDiffContext(base), [base, sources, expansion, full]);
   const model = useMemo(() => applyDiffSyntax(contextModel, syntax), [contextModel, syntax]);
-  const rows = model.split;
-  if (mode === "unified") return <pre className={`patch${wrap ? " wrap-lines" : ""}`} aria-label="File diff"><code>{model.unified.map((line, index) => <span key={index} className={line.gap ? "context-gap-row" : line.kind}>{line.gap ? gapControls(line.gap, onExpand) : <>{line.prefix}{inlineText(line.text, line.segments)}</>}</span>)}</code></pre>;
+  const rows = model.split.filter(row => !("header" in row));
+  if (mode === "unified") return <pre className={`patch${wrap ? " wrap-lines" : ""}`} aria-label="File diff"><code>{model.unified.filter(line => !line.metadata && line.kind !== "hunk").map((line, index) => <span key={index} className={line.gap ? "context-gap-row" : line.kind}>{line.gap ? gapControls(line.gap, onExpand) : <>{line.prefix}{inlineText(line.text, line.segments)}</>}</span>)}</code></pre>;
   return <div className={`split-patch${wrap ? " wrap-lines" : ""}`} style={wrap ? { gridTemplateRows: `auto repeat(${rows.length}, auto)` } : undefined} aria-label="Side-by-side file diff">
     {(["left", "right"] as const).map(side => <div className="split-side" style={wrap ? { gridRow: `1 / span ${rows.length + 1}` } : undefined} key={side} role="region" aria-label={side === "left" ? "Before changes" : "After changes"} tabIndex={0}>
       <div className="split-title">{side === "left" ? "Before" : "After"}</div>
       <pre><code>{rows.map((row, index) => {
-        if ("header" in row) return <span className="split-line hunk" key={index}>{row.header || " "}</span>;
+        if ("header" in row) return null;
         if ("gap" in row) return <span className="split-line context-gap-row" key={index}>{side === "left" ? gapControls(row.gap, onExpand) : <span className="context-gap"><span className="context-gap-label">{row.gap.count} hidden lines</span></span>}</span>;
         const line = row[side];
         return <span className={`split-line ${line?.kind ?? "placeholder"}`} key={index}><span className="line-number" aria-hidden="true">{line?.number ?? " "}</span>{inlineText(line?.text ?? "", line?.segments)}{line?.noNewline && <span className="no-newline" title="No newline at end of file"> ⏎ No newline at end of file</span>}</span>;

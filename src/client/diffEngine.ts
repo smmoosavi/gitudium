@@ -2,6 +2,13 @@ import { splitPatch } from "./diff";
 import type { DiffEngine } from "./diffModel";
 import { patchHighlights } from "./wordDiff";
 
+export function diffModeChange(patch: string): string | undefined {
+  const metadata = patch.split(/^@@/m, 1)[0] ?? "";
+  const oldMode = /^old mode (\d+)$/m.exec(metadata)?.[1];
+  const newMode = /^new mode (\d+)$/m.exec(metadata)?.[1];
+  return oldMode && newMode ? `Mode ${oldMode} → ${newMode}` : undefined;
+}
+
 export const defaultDiffEngine: DiffEngine = patch => {
   const highlights = patchHighlights(patch);
   let oldNumber: number | undefined;
@@ -19,12 +26,13 @@ export const defaultDiffEngine: DiffEngine = patch => {
       const segments = highlights.get(index);
       return {
         ...location,
+        metadata: !hunk && oldNumber === undefined,
         text: segments ? line.slice(1) : line,
         prefix: segments ? line[0] : undefined,
         kind: line.startsWith("+") ? "addition" : line.startsWith("-") ? "deletion" : line.startsWith("@@") ? "hunk" : undefined,
         segments,
       };
     }),
-    split: splitPatch(patch, highlights),
+    split: splitPatch(patch, highlights).map(row => "header" in row && !row.header.startsWith("@@") ? { ...row, metadata: true } : row),
   };
 };
