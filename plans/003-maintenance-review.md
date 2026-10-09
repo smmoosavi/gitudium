@@ -67,6 +67,12 @@ In [monitor.ts](../src/repository/monitor.ts), notification exceptions can be tr
 - Failed initial subscription does not leave a listener registered.
 - Shutdown remains idempotent and preserves watcher/polling fallback behavior.
 
+### Implementation update — 2026-10-09
+
+Completed. Fingerprint failures and notification delivery now use separate error boundaries. Change and shutdown callbacks are isolated per subscriber, with failures reported through `console.warn` so healthy subscribers still receive events. Initial callback failures propagate to the caller and roll back newly added registrations. Shutdown clears listeners in `finally`, and reentrant shutdown remains idempotent.
+
+Validation: `pnpm test tests/monitor.test.ts` passed (15 tests), including throwing subscribers during normal changes, fingerprint failures, initial subscription, and shutdown, plus existing watcher, polling, fallback, and SSE cleanup coverage. `pnpm run typecheck` passed on Bun 1.4.0.
+
 ## 3. Add mounted browser coverage before restructuring UI state
 
 **Priority: High maintenance value — prerequisite for safer UI refactoring.**

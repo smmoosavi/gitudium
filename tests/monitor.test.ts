@@ -1,10 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { watch, type FSWatcher } from "node:fs";
 import { createRequestHandler } from "../src/server/http";
 import { GitRepositoryReader } from "../src/repository/git";
-import type { RepositoryMonitorOptions } from "../src/repository/monitor";
+import { RepositoryMonitor, type RepositoryInvalidation, type RepositoryMonitorOptions } from "../src/repository/monitor";
 
 const directories: string[] = [];
 const handlers: ReturnType<typeof createRequestHandler>[] = [];
@@ -251,4 +251,70 @@ test("linked worktrees watch both resolved directories; unsupported watchers fal
   await git(linked, "checkout", "-b", "linked-branch");
   expect((await connection.event()).reason).toBe("changed");
   await connection.stream.cancel();
+});
+
+for (const readFailure of [false, true]) {
+  test(`subscriber exceptions do not interrupt or duplicate ${readFailure ? "fingerprint failure" : "change"} notifications`, async () => {
+    const path = await fixture();
+    let hint!: () => void;
+    const factory = ((_path: unknown, _options: unknown, callback: () => void) => {
+      hint = callback;
+      return { on() { return this; }, close() {} } as unknown as FSWatcher;
+    }) as unknown as typeof watch;
+    const monitor = new RepositoryMonitor(() => GitRepositoryReader.discover(path), { watch: factory, debounceMs: 1, reconcileMs: 60_000 });
+    const events: (RepositoryInvalidation | null)[] = [];
+    const warning = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await monitor.start();
+      monitor.subscribe(event => { if (event?.reason === "changed") throw new Error("subscriber failed"); });
+      let received!: () => void;
+      monitor.subscribe(event => { events.push(event); if (event?.reason === "changed") received(); });
+      for (let version = 1; version <= 2; version++) {
+        const notification = new Promise<void>(resolve => { received = resolve; });
+        if (readFailure) await writeFile(join(path, ".git", "HEAD"), "x".repeat(8 * 1024 * 1024 + 1));
+        else await git(path, "update-ref", `refs/custom/isolation-${version}`, "HEAD");
+        hint();
+        await notification;
+        expect(events).toEqual([{ reason: "connected", version: 0 }, ...Array.from({ length: version }, (_, index) => ({ reason: "changed" as const, version: index + 1 }))]);
+        expect(warning).toHaveBeenCalledTimes(version);
+      }
+    } finally {
+      monitor.close();
+      warning.mockRestore();
+    }
+  });
+}
+
+test("failed initial subscription rolls back registration and preserves the callback error", async () => {
+  const failure = new Error("initial callback failed");
+  const monitor = new RepositoryMonitor(() => { throw new Error("unexpected discovery"); });
+  const calls: (RepositoryInvalidation | null)[] = [];
+  const listener = (event: RepositoryInvalidation | null) => { calls.push(event); throw failure; };
+  expect(() => monitor.subscribe(listener)).toThrow(failure);
+  monitor.close();
+  monitor.close();
+  expect(calls).toEqual([{ reason: "connected", version: 0 }]);
+});
+
+test("throwing shutdown subscribers do not prevent healthy delivery or resource cleanup", async () => {
+  const path = await fixture();
+  let closed = 0;
+  const factory = (() => ({ on() { return this; }, close() { closed++; } })) as unknown as typeof watch;
+  const monitor = new RepositoryMonitor(() => GitRepositoryReader.discover(path), { watch: factory, reconcileMs: 60_000 });
+  const events: (RepositoryInvalidation | null)[] = [];
+  const warning = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await monitor.start();
+    monitor.subscribe(event => { if (event === null) throw new Error("shutdown callback failed"); });
+    monitor.subscribe(event => { events.push(event); if (event === null) monitor.close(); });
+    monitor.close();
+    monitor.close();
+    expect(events).toEqual([{ reason: "connected", version: 0 }, null]);
+    expect(closed).toBe(1);
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(() => monitor.subscribe(() => {})).toThrow();
+  } finally {
+    monitor.close();
+    warning.mockRestore();
+  }
 });

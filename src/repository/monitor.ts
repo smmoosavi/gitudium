@@ -134,19 +134,17 @@ export class RepositoryMonitor {
     }
     this.checking = true;
     try {
-      const next = await fingerprint(this.directories, this.abort.signal);
-      if (this.abort.signal.aborted) return;
-      const changed = this.previous !== undefined && this.previous !== next;
-      this.previous = next;
-      if (changed) {
-        const event: RepositoryInvalidation = { reason: "changed", version: ++this.version };
-        for (const listener of this.listeners) listener(event);
+      let changed = false;
+      try {
+        const next = await fingerprint(this.directories, this.abort.signal);
+        changed = this.previous !== undefined && this.previous !== next;
+        this.previous = next;
+      } catch {
+        // Limits or transient read failures must not silently leave clients stale.
+        changed = true;
       }
-    } catch {
-      // Limits or transient read failures must not silently leave clients stale.
-      if (!this.abort.signal.aborted) {
-        const event: RepositoryInvalidation = { reason: "changed", version: ++this.version };
-        for (const listener of this.listeners) listener(event);
+      if (changed && !this.abort.signal.aborted) {
+        this.notify({ reason: "changed", version: ++this.version });
       }
     } finally {
       this.checking = false;
@@ -157,10 +155,27 @@ export class RepositoryMonitor {
     }
   }
 
+  private notify(event: RepositoryInvalidation | null): void {
+    for (const listener of [...this.listeners]) {
+      if (event !== null && this.abort.signal.aborted) break;
+      try {
+        listener(event);
+      } catch (error) {
+        console.warn("Repository monitor subscriber failed.", error);
+      }
+    }
+  }
+
   subscribe(listener: (event: RepositoryInvalidation | null) => void): () => void {
     this.abort.signal.throwIfAborted();
+    const registered = this.listeners.has(listener);
     this.listeners.add(listener);
-    listener({ reason: "connected", version: this.version });
+    try {
+      listener({ reason: "connected", version: this.version });
+    } catch (error) {
+      if (!registered) this.listeners.delete(listener);
+      throw error;
+    }
     return () => { this.listeners.delete(listener); };
   }
 
@@ -170,7 +185,10 @@ export class RepositoryMonitor {
     if (this.debounce) clearTimeout(this.debounce);
     if (this.periodic) clearInterval(this.periodic);
     for (const watcher of this.watchers.splice(0)) watcher.close();
-    for (const listener of this.listeners) listener(null);
-    this.listeners.clear();
+    try {
+      this.notify(null);
+    } finally {
+      this.listeners.clear();
+    }
   }
 }
