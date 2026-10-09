@@ -77,9 +77,13 @@ test("whitespace preference validates stored values and tolerates unavailable st
   let saved: string | null = null;
   const storage = { getItem: () => saved, setItem: (key: string, value: string) => { expect(key).toBe(whitespaceStorageKey); saved = value; } };
   expect(readWhitespaceMode(storage)).toBe("none");
-  for (const mode of ["none", "trailing", "all", "all-and-blank-lines"] as const) {
+  for (const mode of ["none", "all"] as const) {
     writeWhitespaceMode(storage, mode);
     expect(readWhitespaceMode(storage)).toBe(mode);
+  }
+  for (const legacy of ["trailing", "all-and-blank-lines"]) {
+    saved = legacy;
+    expect(readWhitespaceMode(storage)).toBe("all");
   }
   saved = "invalid";
   expect(readWhitespaceMode(storage)).toBe("none");
