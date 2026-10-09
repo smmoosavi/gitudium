@@ -7,6 +7,7 @@ import type { AppRouter } from "../src/server/router";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
 
 let directory: string;
+let handleRequest: ReturnType<typeof createRequestHandler>;
 let server: ReturnType<typeof Bun.serve>;
 let api: ReturnType<typeof createTRPCClient<AppRouter>>;
 async function git(...args: string[]) {
@@ -25,10 +26,15 @@ beforeAll(async () => {
   await git("config", "user.name", "API Fixture");
   await git("config", "user.email", "api@example.test");
   await git("config", "commit.gpgsign", "false");
-  server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: createRequestHandler(directory) });
+  handleRequest = createRequestHandler(directory);
+  server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handleRequest });
   api = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: new URL("/api/trpc", server.url).href })] });
 });
-afterAll(async () => { server?.stop(true); if (directory) await rm(directory, { recursive: true, force: true }); });
+afterAll(async () => {
+  handleRequest?.close();
+  await server?.stop(true);
+  if (directory) await rm(directory, { recursive: true, force: true });
+});
 
 test("repository queries navigate empty history, references, pages, details and literal file diffs", async () => {
   expect((await api.metadata.query()).head).toBeNull();
@@ -108,10 +114,15 @@ test("history pagination uses short GET URLs even with many distinct reference t
 test("discovery failures become clear API errors without breaking health", async () => {
   const outside = await mkdtemp(join(process.cwd(), ".gitudium-outside-"));
   await writeFile(join(outside, ".git"), "gitdir: missing\n");
-  const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: createRequestHandler(outside) });
+  const otherHandler = createRequestHandler(outside);
+  const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: otherHandler });
   try {
     const client = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: new URL("/api/trpc", other.url).href })] });
     await expect(client.metadata.query()).rejects.toMatchObject({ message: "The launch directory is not inside a Git repository.", data: { code: "NOT_FOUND" } });
     expect((await client.health.query({ name: "test" })).status).toBe("ok");
-  } finally { other.stop(true); await rm(outside, { recursive: true, force: true }); }
+  } finally {
+    otherHandler.close();
+    await other.stop(true);
+    await rm(outside, { recursive: true, force: true });
+  }
 });

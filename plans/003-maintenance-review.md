@@ -125,6 +125,14 @@ Startup, request protection, and shutdown are duplicated between [index.ts](../s
 - Packaged asset routing, protected API requests, and SIGTERM shutdown pass.
 - The artifact still runs outside the checkout with only Bun and Git available.
 
+### Implementation update — 2026-10-09
+
+Completed. [server.ts](../src/server/server.ts) provides a typed, importable factory with explicit development origin/token and embedded-asset options, plus shared CLI startup and signal handling. Development retains its API-only backend, Vite origin, shared token, port defaults, and printed browser URL; packaged startup retains embedded assets, same-origin protection, ephemeral-port support, and its printed URL. Generated source now only imports shared startup and supplies embedded assets; distribution remains one executable JavaScript file.
+
+Factory instances own discovery, monitoring, event streams, and the listener. Idempotent asynchronous shutdown closes the handler before stopping the listener; failed listener startup also closes the handler. CLI signal listeners are removed on shutdown. Removed the unused implicit handler singleton and retained/closed handler references in API fixtures. Artifact smoke uses a checkout-local disposable fixture and launches from the filesystem root, without adjacent dependencies or checkout-relative asset access.
+
+Validation: targeted server/API/monitor/access/assets/CLI tests passed (44 tests), and full `pnpm test` passed (206 tests across 31 files); `pnpm run typecheck`, `pnpm run build`, and `pnpm run test:artifact` passed, covering isolated assets, authenticated repository API/diffs, live invalidation, CLI errors, and SIGTERM. Development startup and the real Vite proxy passed an isolated smoke on port 5175 with the unchanged explicit browser origin (5173), checking startup URL/token, assets, authenticated API, foreign-origin rejection, API-only backend, and SIGTERM. Port 5173 was occupied by an existing development session, so the default-port combined launcher could not be certified without disrupting it. Vite's existing proxy CORS headers are unchanged; the backend itself strips CORS headers. Local runtime: Bun 1.4.0; CI's pinned Bun 1.3.14 and other platforms were not exercised.
+
 ## 5. Keep syntax highlighting services alive across commit changes
 
 **Priority: Medium — preserve worker initialization and bounded cache reuse.**

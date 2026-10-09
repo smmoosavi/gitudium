@@ -172,6 +172,12 @@ pnpm run build
 
 The build creates the single-file `gitudium` executable at the checkout root. You can copy that file elsewhere; only Bun and Git are needed to run it.
 
+### Development server
+
+Run `pnpm run dev` (optionally with `--port <backend-port>` and `--directory <repository>`). Vite serves the browser on `http://127.0.0.1:5173` and proxies `/api` to the loopback backend, which defaults to port 3000 and requires a nonzero port. Open the full development URL printed by the backend. The launcher shares a fresh token with the backend; `pnpm run dev:server` alone generates its own token unless `GITUDIUM_DEV_TOKEN` is supplied.
+
+Both startup paths use `src/server/server.ts` for access protection, API routing, and shutdown. Development explicitly allows the Vite browser origin and serves no backend assets; the packaged entrypoint supplies embedded assets and allows only its own origin. CLI defaults, printed URLs, and the single-file distribution are unchanged. SIGINT/SIGTERM close repository discovery, monitoring, event streams, and the listener before exiting. Importable factory instances own those resources and must be disposed with `await instance.close()`; tests using `createRequestHandler` directly must also close their handlers.
+
 ### Validation
 
 ```sh
@@ -179,6 +185,8 @@ pnpm test
 pnpm run typecheck
 pnpm exec playwright install chromium
 pnpm run test:browser
+pnpm run build
+pnpm run test:artifact
 ```
 
 The mounted browser suite starts its own Vite server on `127.0.0.1:5174` (that port must be free). It uses Chromium with deterministic tRPC route fixtures and a controlled SSE stream, not a running Git repository or API server. It covers virtualized keyboard selection/focus/scrolling, files-to-diff navigation, pagination failure/retry, reference changes, and live refresh while inspecting older details. Assertions wait for observable UI states; there are no arbitrary sleeps. Browser cases use `*.browser.ts` so `pnpm test` continues to run the existing Bun tests independently. Browser binaries and their OS dependencies must be available; on supported CI hosts, `pnpm exec playwright install --with-deps chromium` can provision them.

@@ -1,9 +1,9 @@
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import { strict as assert } from "node:assert";
 
-const directory = await mkdtemp(join(tmpdir(), "gitudium-smoke-"));
+const directory = await mkdtemp(join(import.meta.dir, "..", ".gitudium-smoke-"));
+const launchDirectory = parse(directory).root;
 let child: ReturnType<typeof Bun.spawn> | undefined;
 try {
   const git = async (...args: string[]) => {
@@ -27,13 +27,13 @@ try {
     [["--directory", join(directory, "missing")], 1, /usage/],
     [["--directory", join(directory, "fixture.txt")], 1, /not a directory/],
   ] as const) {
-    const check = Bun.spawn([artifact, ...args], { cwd: tmpdir(), env: { PATH: process.env.PATH }, stdout: "pipe", stderr: "pipe" });
+    const check = Bun.spawn([artifact, ...args], { cwd: launchDirectory, env: { PATH: process.env.PATH }, stdout: "pipe", stderr: "pipe" });
     const [stdout, stderr, status] = await Promise.all([new Response(check.stdout).text(), new Response(check.stderr).text(), check.exited]);
     assert.equal(status, expectedStatus, stdout + stderr);
     assert.match(stdout + stderr, pattern);
   }
   child = Bun.spawn([artifact, "--port", "0", "--directory", directory], {
-    cwd: tmpdir(),
+    cwd: launchDirectory,
     env: { PATH: process.env.PATH, GITUDIUM_PORT: "invalid", GITUDIUM_DIRECTORY: join(directory, "missing") },
     stdout: "pipe",
     stderr: "inherit",

@@ -1,14 +1,18 @@
 import { afterAll, expect, test } from "bun:test";
 import { createTRPCClient, httpBatchLink, TRPCClientError } from "@trpc/client";
 import type { AppRouter } from "../src/server/router";
-import { handleRequest } from "../src/server/http";
+import { createRequestHandler } from "../src/server/http";
 
+const handleRequest = createRequestHandler();
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handleRequest });
 const api = createTRPCClient<AppRouter>({
   links: [httpBatchLink({ url: new URL("/api/trpc", server.url).href })],
 });
 
-afterAll(() => server.stop(true));
+afterAll(async () => {
+  handleRequest.close();
+  await server.stop(true);
+});
 
 test("typed client calls the API over HTTP", async () => {
   expect(await api.health.query({ name: "Gitudium" })).toEqual({

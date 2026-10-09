@@ -29,36 +29,8 @@ try {
 
   const entrypoint = join(temporary, "entry.ts");
   await Bun.write(entrypoint, `
-import { createRequestHandler } from "../src/server/http";
-import { serveAsset } from "../src/server/assets";
-import { createAccessGuard, protectResponse } from "../src/server/access";
-import { readLaunchOptions } from "../src/server/cli";
-const options = readLaunchOptions();
-const handleRequest = createRequestHandler(options.directory);
-const access = createAccessGuard();
-const assets = ${JSON.stringify(assets)};
-const server = Bun.serve({
-  hostname: "127.0.0.1",
-  port: options.port,
-  idleTimeout: 0,
-  async fetch(request, server) {
-    const rejected = access.protect(request, server.url.origin);
-    if (rejected) return protectResponse(rejected, request);
-    const pathname = new URL(request.url).pathname;
-    const response = pathname === "/api" || pathname.startsWith("/api/")
-      ? await handleRequest(request)
-      : serveAsset(request, assets);
-    return protectResponse(response, request);
-  },
-});
-console.log("Gitudium: " + server.url + "#token=" + access.token);
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    handleRequest.close();
-    server.stop(true);
-    process.exit(0);
-  });
-}
+import { startServer } from "../src/server/server";
+startServer({ assets: ${JSON.stringify(assets)} });
 `);
   const result = await Bun.build({
     entrypoints: [entrypoint],

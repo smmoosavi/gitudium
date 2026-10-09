@@ -90,5 +90,3 @@ export function createRequestHandler(cwd = process.cwd(), suppliedReader?: Repos
     },
   });
 }
-
-export const handleRequest = createRequestHandler();
