@@ -95,6 +95,14 @@ Selection, virtualized-row focus, scrolling, and keyboard navigation cross [main
 - Fixtures avoid timing-dependent repository changes and arbitrary sleeps.
 - Tests cover both successful interactions and recovery paths.
 
+### Implementation update — 2026-10-09
+
+Completed. The importable `App` now lives in [App.tsx](../src/client/App.tsx); bootstrap retains the same StrictMode, QueryClient configuration, token gate, and stylesheet. No UI state ownership was reorganized.
+
+Added five mounted Chromium integration tests in [app.browser.ts](../browser/app.browser.ts), using deterministic tRPC route fixtures and a controlled streaming SSE response through the real client parser. They verify offscreen keyboard selection with actual focus, viewport geometry, scrolling, and virtualized row removal; files-to-diff focus and scroll reset; failed pagination retaining rows and retrying the identical cursor; reference changes resetting selection; and live invalidation resetting paginated history without replacing older details, refetching immutable detail queries, or stealing diff focus/scroll position. Assertions await observable states, with no arbitrary sleeps. Browser filenames remain outside Bun test discovery; existing pure tests are unchanged.
+
+Validation: `pnpm run test:browser` passed (5 tests), `pnpm test` passed (201 tests across 30 files), `pnpm run typecheck`, `pnpm run build`, and `pnpm run test:artifact` passed. Local runtime: Bun 1.4.0. Browser tooling is Playwright with Chromium; setup and the dedicated Vite port (5174) are documented in README. Coverage does not certify other browsers or real SSE transport/repository behavior; artifact smoke separately verifies real live invalidation. CI's pinned Bun 1.3.14 was not exercised locally.
+
 ## 4. Unify development and packaged server startup
 
 **Priority: Medium — reduce behavioral drift and untyped generated logic.**

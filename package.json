@@ -10,6 +10,8 @@
     "build": "bun scripts/build.ts",
     "build:client": "vite build",
     "test:artifact": "bun scripts/smoke.ts",
+    "test:browser": "playwright test",
+    "test:browser:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
@@ -24,6 +26,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.0",
     "@types/bun": "^1.3.14",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

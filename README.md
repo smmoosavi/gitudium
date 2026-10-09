@@ -171,3 +171,16 @@ pnpm run build
 ```
 
 The build creates the single-file `gitudium` executable at the checkout root. You can copy that file elsewhere; only Bun and Git are needed to run it.
+
+### Validation
+
+```sh
+pnpm test
+pnpm run typecheck
+pnpm exec playwright install chromium
+pnpm run test:browser
+```
+
+The mounted browser suite starts its own Vite server on `127.0.0.1:5174` (that port must be free). It uses Chromium with deterministic tRPC route fixtures and a controlled SSE stream, not a running Git repository or API server. It covers virtualized keyboard selection/focus/scrolling, files-to-diff navigation, pagination failure/retry, reference changes, and live refresh while inspecting older details. Assertions wait for observable UI states; there are no arbitrary sleeps. Browser cases use `*.browser.ts` so `pnpm test` continues to run the existing Bun tests independently. Browser binaries and their OS dependencies must be available; on supported CI hosts, `pnpm exec playwright install --with-deps chromium` can provision them.
+
+`src/client/App.tsx` exports the application component; `src/client/main.tsx` retains the production bootstrap, StrictMode, QueryClient provider, access-token gate, and stylesheet. The browser suite loads that same entry point. It supplements pure tests and HTTP artifact smoke coverage, but does not certify other browsers or real SSE transport/repository behavior.

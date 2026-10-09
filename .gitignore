@@ -2,3 +2,5 @@ node_modules/
 dist/
 gitudium
 *.tsbuildinfo
+playwright-report/
+test-results/
