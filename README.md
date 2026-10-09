@@ -64,6 +64,8 @@ The history chunk size and server request maximum share `HISTORY_CHUNK_SIZE` in 
 
 The graph keeps its lane layout while sizing its display to visible rows and overscan, including passing connections. Its width is capped at 35% of the log pane or 180 px, whichever is smaller; expansion starts immediately and shrinking is delayed briefly to avoid jitter. Width changes animate gently over 160 ms unless reduced motion is enabled. Dense sections show a shared horizontal graph scrollbar above the list (also operable with Left/Right and Home/End), leaving commit text stationary. Rows stay 100 px tall: subjects use up to two lines, author/date stays on one line, and references show the first label plus a `+N` count. Hover truncated text or labels for the full values; selecting a commit opens its full details.
 
+Syntax highlighting keeps a lazy worker and a bounded cache for the viewer's lifetime, including commit switches and empty detail panes during navigation debounce. Returning to a recently highlighted file can reuse its tokens (up to four results and 200,000 cached tokens). Superseded requests cannot publish stale highlighting; selection and expanded context still reset with each commit. Unmounting the viewer terminates the worker and clears its cache and timers.
+
 Empty and bare repositories are supported. Failed requests provide a **Retry** button.
 
 ### Keyboard navigation

@@ -14,6 +14,7 @@ const details = (revision: string): CommitDetails => ({
 });
 
 export class RepositoryFixture {
+  textSources = false;
   failPagination = false;
   paginationAttempts = 0;
   refreshed = false;
@@ -77,7 +78,10 @@ export class RepositoryFixture {
       }
       case "commit": return details(input!.revision as string);
       case "diff": return { state: "text", patch: `diff --git a/${input!.path} b/${input!.path}\n--- a/${input!.path}\n+++ b/${input!.path}\n@@ -1,1 +1,81 @@\n context\n${Array.from({ length: 80 }, (_, i) => `+${input!.path} fixture line ${i}`).join("\n")}\n` };
-      case "sources": return { state: "unavailable" };
+      case "sources": return this.textSources ? { state: "text", before: null, after: {
+        revision: input!.revision, path: input!.path,
+        text: `context\n${Array.from({ length: 80 }, (_, i) => `${input!.path} fixture line ${i}`).join("\n")}\n`,
+      } } : { state: "unavailable" };
       default: throw new Error(`Unexpected fixture method: ${method}`);
     }
   }

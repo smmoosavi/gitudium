@@ -139,7 +139,7 @@ Validation: targeted server/API/monitor/access/assets/CLI tests passed (44 tests
 
 ### Evidence
 
-[main.tsx](../src/client/main.tsx) keys the commit view by commit. [useSyntaxHighlighting.ts](../src/client/useSyntaxHighlighting.ts) creates and disposes its service with that component. Switching commits therefore terminates the worker and discards the bounded cache in [syntaxService.ts](../src/client/syntaxService.ts).
+At review time, [App.tsx](../src/client/App.tsx) keyed the commit view by commit, and [useSyntaxHighlighting.ts](../src/client/useSyntaxHighlighting.ts) created and disposed its service with that component. Switching commits therefore terminated the worker and discarded the bounded cache in [syntaxService.ts](../src/client/syntaxService.ts).
 
 ### Safe implementation
 
@@ -154,6 +154,12 @@ Validation: targeted server/API/monitor/access/assets/CLI tests passed (44 tests
 - Switching commits does not recreate the service unnecessarily.
 - Older responses cannot update the newly selected file.
 - Cache bounds remain enforced; no unbounded global cache is introduced.
+
+### Implementation update — 2026-10-09
+
+Completed. [useSyntaxService.ts](../src/client/useSyntaxService.ts) owns a resource-free, lazily initialized service at `App` viewer scope and disposes it on effect cleanup. `CommitView` receives that service and injects it into the highlighting hook, whose cleanup cancels only its own request. Keyed commit-local selection/context resets and navigation debounce remain unchanged. The existing worker failure recovery, stale-response checks, cache limits, and timer cleanup are unchanged; disposal resets the same service so StrictMode effect replay can safely request again.
+
+Validation: `pnpm test tests/syntax-service.test.ts tests/diff-syntax.test.ts` (18 passing), `pnpm run typecheck`, and `pnpm run test:browser` (8 passing). Mounted regressions cover rapid keyed switching, stale results, empty detail gaps, return-to-commit cache reuse, reference resets, commit-local selection/full-file resets, StrictMode owner/consumer replay, and viewer unmount with pending work. A deterministic service regression verifies timer/cache cleanup, stale worker detachment, idempotent disposal, and reuse after disposal. Browser lifecycle tests use controlled workers; actual Shiki tokenization remains covered by the unit suite.
 
 ## 6. Reuse diff alignment decisions
 

@@ -13,6 +13,7 @@ import { useRepositoryQueries } from "./useRepositoryQueries";
 import { useLiveConnection } from "./useLiveConnection";
 import { useViewerPreferences } from "./useViewerPreferences";
 import { useCommitSelection } from "./useCommitSelection";
+import { useSyntaxService } from "./useSyntaxService";
 
 export function App() {
   const { wrap, setWrap, filesMode, setFilesMode, diffMode, setDiffMode, layout, setLayout } = useViewerPreferences();
@@ -29,6 +30,7 @@ export function App() {
   const [revision, setRevision] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const detailId = useCommitSelection(selected);
+  const syntaxService = useSyntaxService();
   const [focusedPane, setFocusedPane] = useState<FocusedPane>("commits");
   const historyRef = useRef<HTMLElement>(null);
   const commitListRef = useRef<CommitListHandle>(null);
@@ -74,7 +76,7 @@ export function App() {
         canLoadMore={history.hasNextPage && !history.isFetching && !history.isError} onLoadMore={loadMoreHistory} fetchingNextPage={history.isFetchingNextPage} />
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
-      {detailId ? <CommitView key={detailId} navigationRef={detailNavigationRef} id={detailId} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
+      {detailId ? <CommitView key={detailId} syntaxService={syntaxService} navigationRef={detailNavigationRef} id={detailId} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
         <section className="files-panel" aria-label="Commit details and changed files" aria-busy={selected !== null}>{!selected && <><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></>}</section>
         <section className="diff-panel" aria-label="File diff" aria-busy={selected !== null}>{!selected && <><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="brand-mark empty-icon" aria-hidden="true">G</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p></div></>}</section>
       </>}

@@ -13,10 +13,12 @@ import type { DetailNavigationAdapter } from "./useKeyboardNavigation";
 import { formatDate } from "./date";
 import { canShowFullFile, contextPageSize, type ContextExpansion } from "./diffContext";
 import { useSyntaxHighlighting } from "./useSyntaxHighlighting";
+import type { SyntaxService } from "./syntaxService";
 import { diffModeChange, pairedDiffEngine } from "./diffEngine";
 import { sameFileDiffPlaceholder } from "./diffQuery";
 
-export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef }: {
+export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef, syntaxService }: {
+  syntaxService: SyntaxService;
   navigationRef: RefObject<DetailNavigationAdapter | null>;
   focusedPane: FocusedPane; onPaneFocus: (pane: FocusedPane) => void;
   wrap: boolean; onWrapChange: (wrap: boolean) => void;
@@ -50,7 +52,7 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
   const [contextView, setContextView] = useState<{ key: string; expansion: ContextExpansion; full: boolean }>({ key: "", expansion: {}, full: false });
   const context = contextView.key === sourceKey ? contextView : { key: sourceKey, expansion: {}, full: false };
   const textSources = sources.data?.state === "text" ? sources.data : undefined;
-  const syntax = useSyntaxHighlighting(textSources);
+  const syntax = useSyntaxHighlighting(syntaxService, textSources);
   const fullAllowed = textSources !== undefined && canShowFullFile(textSources);
   const contextUnavailable = sources.isError || (sources.data !== undefined && !textSources);
   const expand = (gap: string, direction: "above" | "below") => {

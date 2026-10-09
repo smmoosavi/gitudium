@@ -251,7 +251,32 @@ test("Shiki lazy bundled grammar and theme produce plain tokens; unknown paths p
   expect((await tokenizer.tokenize("const x = 1", "file.js")).flat().some(token => token.color)).toBe(true);
 });
 
+test("dispose clears jobs, timers and cache and supports effect replay on the same service", () => {
+  const f = fixture();
+  f.request(sources("a"));
+  f.workers[0]!.finish();
+  f.clock.advance(100);
+  const cancel = f.request(sources("b"));
+  const staleHandler = f.workers[0]!.onmessage!;
+  f.request(sources("c"));
+  f.service.dispose();
+  cancel();
+  expect(f.clock.tasks.size).toBe(0);
+  expect(f.workers[0]!.terminated).toBe(true);
+  expect(f.workers[0]!.onmessage).toBeNull();
+  f.request(sources("a"));
+  expect(f.workers).toHaveLength(2);
+  staleHandler({ data: { id: f.workers[0]!.jobs.at(-1)!.id, result: tokens() } });
+  expect(f.results.at(-1)).toBeUndefined();
+  f.workers[1]!.finish();
+  expect(f.results.at(-1)).toEqual(tokens());
+  f.service.dispose();
+  f.service.dispose();
+  expect(f.clock.tasks.size).toBe(0);
+  expect(f.workers[1]!.terminated).toBe(true);
+});
+
 test("hook is inert during server rendering", () => {
-  function Component() { return createElement("span", null, String(useSyntaxHighlighting(sources()))); }
+  function Component() { return createElement("span", null, String(useSyntaxHighlighting(new SyntaxService(), sources()))); }
   expect(renderToStaticMarkup(createElement(Component))).toBe("<span>undefined</span>");
 });
