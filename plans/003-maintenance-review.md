@@ -14,7 +14,7 @@ Baseline verified during the review:
 - `pnpm run test:artifact` passed, including isolated startup, assets, repository API, live invalidation, and SIGTERM shutdown.
 - Local validation used Bun 1.4.0; CI pins Bun 1.3.14. Local success does not replace validation on the pinned runtime.
 
-These recommendations are not an implementation record. Items 1–2 describe reproducible injected failure-path bugs; the remaining items are maintenance opportunities, not confirmed production regressions.
+The recommendations below retain the original review findings; implementation updates are recorded separately under each item. Items 1–2 described reproducible injected failure-path bugs; the remaining items are maintenance opportunities, not confirmed production regressions.
 
 ## 1. Make Git process cleanup unconditional
 
@@ -37,6 +37,12 @@ In [runner.ts](../src/repository/runner.ts), process termination and exit waitin
 - A cleanup failure cannot permanently consume a concurrency slot.
 - Cancellation, timeout, output-limit, and listener-cleanup tests still pass.
 - Later commands can run after each injected failure.
+
+### Implementation update — 2026-10-09
+
+Completed. Concurrency slots now release in an unconditional inner `finally`. Cancellation and output limits interrupt exit waiting even when termination throws; collectors are cancelled and settled, stream locks are released, and abort listeners are removed. Primary errors are preserved, with secondary cleanup failures reported through `console.warn`. When termination throws, cleanup cannot guarantee OS-level process termination and does not wait indefinitely for that process to exit.
+
+Regression coverage includes throwing termination, rejected exit waits, delayed cancellation and output completion, timeout, and slot reuse after failures. Validation: `pnpm test tests/git-runner.test.ts tests/repository.test.ts` passed (32 tests); `pnpm run typecheck` passed on Bun 1.4.0.
 
 ## 2. Isolate monitor subscriber exceptions
 

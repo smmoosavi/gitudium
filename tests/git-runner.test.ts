@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { GitRunner, type GitProcess, type GitSpawn } from "../src/repository/runner";
 
 function processFixture(stdout = "ok", stderr = "", status = 0, deferred = false) {
@@ -158,5 +158,143 @@ test("runner terminates a still-running child when output collection fails", asy
   expect(child.child.stdout.locked).toBe(false);
   expect(child.child.stderr.locked).toBe(false);
   expect(signals.removed).toEqual(signals.added);
+  await slotsAvailable(runner);
+});
+
+test("runner preserves primary failures and releases slots after cleanup failures", async () => {
+  for (const failure of ["kill", "exited"] as const) {
+    const primary = new Error("stream failure");
+    const secondary = new Error("cleanup failure");
+    const child = processFixture("", "", 0, true);
+    child.child.stdout = new ReadableStream({ start: controller => controller.error(primary) });
+    if (failure === "kill") child.child.kill = () => { throw secondary; };
+    else child.child.kill = () => { child.child.exited = Promise.reject(secondary); };
+    const signals = trackedSignal();
+    let first = true;
+    const runner = new GitRunner("/fixture", () => {
+      if (!first) return processFixture().child;
+      first = false;
+      return child.child;
+    });
+    const warning = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(runner.run(["probe"], signals.signal)).rejects.toBe(primary);
+      expect(warning).toHaveBeenCalled();
+      expect(signals.removed).toEqual(signals.added);
+      expect(child.child.stdout.locked).toBe(false);
+      expect(child.child.stderr.locked).toBe(false);
+      await slotsAvailable(runner);
+    } finally {
+      warning.mockRestore();
+      child.finish();
+    }
+  }
+});
+
+test("runner settles delayed stream cancellation before releasing its slot", async () => {
+  let cancelled!: () => void;
+  const cancellationStarted = new Promise<void>(resolve => { cancelled = resolve; });
+  let complete!: () => void;
+  const delayed = new Promise<void>(resolve => { complete = resolve; });
+  const child = processFixture("", "", 0, true);
+  child.child.stdout = new ReadableStream({ start: controller => controller.error(new Error("stream failure")) });
+  child.child.stderr = new ReadableStream({ cancel: () => { cancelled(); return delayed; } });
+  const signals = trackedSignal();
+  let first = true;
+  const runner = new GitRunner("/fixture", () => {
+    if (!first) return processFixture().child;
+    first = false;
+    return child.child;
+  });
+  let settled = false;
+  const pending = runner.run(["probe"], signals.signal).catch(error => { settled = true; return error; });
+  await cancellationStarted;
+  expect(settled).toBe(false);
+  complete();
+  expect(await pending).toMatchObject({ message: "stream failure" });
+  expect(child.child.stdout.locked).toBe(false);
+  expect(child.child.stderr.locked).toBe(false);
+  expect(signals.removed).toEqual(signals.added);
+  await slotsAvailable(runner);
+});
+
+test("runner cancellation and output limits survive throwing termination", async () => {
+  for (const cancellation of [true, false]) {
+    const child = processFixture(cancellation ? "" : "oversized", "", 0, true);
+    child.child.kill = () => { throw new Error("termination failed"); };
+    const signals = trackedSignal();
+    let first = true;
+    const runner = new GitRunner("/fixture", () => {
+      if (!first) return processFixture().child;
+      first = false;
+      return child.child;
+    });
+    const warning = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const pending = runner.run(["probe"], signals.signal, 1);
+      if (cancellation) signals.controller.abort();
+      await expect(pending).rejects.toMatchObject({ code: cancellation ? "CANCELLED" : "OUTPUT_LIMIT" });
+      expect(warning).toHaveBeenCalled();
+      expect(signals.removed).toEqual(signals.added);
+      expect(child.child.stdout.locked).toBe(false);
+      expect(child.child.stderr.locked).toBe(false);
+      await slotsAvailable(runner);
+    } finally {
+      warning.mockRestore();
+      child.finish();
+    }
+  }
+});
+
+test("runner releases slots and cancels open streams when exit waiting rejects", async () => {
+  const failure = new Error("exit wait failed");
+  const child = processFixture("", "", 0, true);
+  child.child.exited = Promise.reject(failure);
+  const signals = trackedSignal();
+  let first = true;
+  const runner = new GitRunner("/fixture", () => {
+    if (!first) return processFixture().child;
+    first = false;
+    return child.child;
+  });
+  const warning = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await expect(runner.run(["probe"], signals.signal)).rejects.toBe(failure);
+    expect(warning).toHaveBeenCalled();
+    expect(signals.removed).toEqual(signals.added);
+    expect(child.child.stdout.locked).toBe(false);
+    expect(child.child.stderr.locked).toBe(false);
+    await slotsAvailable(runner);
+  } finally {
+    warning.mockRestore();
+    child.finish();
+  }
+});
+
+test("runner drains output arriving after process exit", async () => {
+  let output!: ReadableStreamDefaultController<Uint8Array>;
+  const child = processFixture("", "", 0);
+  child.child.stdout = new ReadableStream({ start: controller => { output = controller; } });
+  const runner = new GitRunner("/fixture", () => child.child);
+  const pending = runner.run(["probe"]);
+  output.enqueue(Buffer.from("late output"));
+  output.close();
+  expect(await pending).toBe("late output");
+  expect(child.child.stdout.locked).toBe(false);
+  expect(child.kills()).toBe(0);
+});
+
+test("runner cleans up timed-out operations and allows later commands", async () => {
+  const child = processFixture("", "", 0, true);
+  let first = true;
+  const runner = new GitRunner("/fixture", () => {
+    if (!first) return processFixture().child;
+    first = false;
+    return child.child;
+  });
+  await expect(runner.run(["probe"], AbortSignal.timeout(1))).rejects.toMatchObject({ code: "CANCELLED" });
+  expect(child.kills()).toBe(1);
+  expect(child.child.stdout.locked).toBe(false);
+  expect(child.child.stderr.locked).toBe(false);
   await slotsAvailable(runner);
 });
