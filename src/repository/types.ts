@@ -70,6 +70,8 @@ export interface CommitDetails extends CommitSummary {
   diffBase: string | null;
 }
 
+export type WhitespaceMode = "none" | "trailing" | "all" | "all-and-blank-lines";
+
 export type DiffResult =
   | { state: "text"; patch: string }
   | { state: "binary" }
@@ -93,6 +95,6 @@ export interface RepositoryReader {
   references(signal?: AbortSignal): Promise<Reference[]>;
   history(query?: HistoryQuery, signal?: AbortSignal): Promise<HistoryPage>;
   commit(revision: string, signal?: AbortSignal): Promise<CommitDetails>;
-  diff(revision: string, path?: string, signal?: AbortSignal): Promise<DiffResult>;
+  diff(revision: string, path?: string, signal?: AbortSignal, whitespace?: WhitespaceMode): Promise<DiffResult>;
   sources(revision: string, path: string, signal?: AbortSignal): Promise<SourceResult>;
 }

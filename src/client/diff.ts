@@ -3,6 +3,24 @@ import type { LineAligner } from "./lineAlignment";
 export type { DiffLine, DiffRow } from "./diffModel";
 
 export type DiffMode = "unified" | "split";
+import type { WhitespaceMode } from "../repository/types";
+export type { WhitespaceMode } from "../repository/types";
+export const whitespaceStorageKey = "gitudium.diff-whitespace.v1";
+export const whitespaceOptions: { value: WhitespaceMode; label: string }[] = [
+  { value: "none", label: "Do not ignore" },
+  { value: "trailing", label: "Trim whitespaces" },
+  { value: "all", label: "Ignore whitespaces" },
+  { value: "all-and-blank-lines", label: "Ignore whitespaces and empty lines" },
+];
+export function readWhitespaceMode(storage: Pick<Storage, "getItem">): WhitespaceMode {
+  try {
+    const saved = storage.getItem(whitespaceStorageKey);
+    return whitespaceOptions.find(option => option.value === saved)?.value ?? "none";
+  } catch { return "none"; }
+}
+export function writeWhitespaceMode(storage: Pick<Storage, "setItem">, mode: WhitespaceMode) {
+  try { storage.setItem(whitespaceStorageKey, mode); } catch { /* Storage can be blocked or full. */ }
+}
 export const diffStorageKey = "gitudium.diff-mode.v1";
 export const wrapStorageKey = "gitudium.diff-wrap.v1";
 export const pairingStorageKey = "gitudium.diff-pairing.v1";

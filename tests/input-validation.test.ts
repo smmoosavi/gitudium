@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { GitRepositoryReader } from "../src/repository/git";
-import { RepositoryError, type RepositoryReader } from "../src/repository/types";
+import { RepositoryError, type RepositoryReader, type WhitespaceMode } from "../src/repository/types";
 import { appRouter } from "../src/server/router";
 
 const revisions = [
@@ -28,6 +28,30 @@ async function readers() {
   const apiReader = { commit: accepted, diff: accepted, sources: accepted, history: accepted } as unknown as RepositoryReader;
   return { reader, api: appRouter.createCaller({ reader: async () => apiReader }) };
 }
+
+test("diff API defaults whitespace to none, forwards modes and rejects invalid values", async () => {
+  const calls: Parameters<RepositoryReader["diff"]>[] = [];
+  const reader = {
+    diff: async (...args: Parameters<RepositoryReader["diff"]>) => {
+      calls.push(args);
+      return { state: "text" as const, patch: "" };
+    },
+  } as RepositoryReader;
+  const api = appRouter.createCaller({ reader: async () => reader });
+  await api.diff({ revision: "HEAD" });
+  expect(calls.pop()).toEqual(["HEAD", undefined, undefined, "none"]);
+  await api.diff({ revision: "HEAD", whitespace: undefined });
+  expect(calls.pop()).toEqual(["HEAD", undefined, undefined, "none"]);
+  const modes: WhitespaceMode[] = ["none", "trailing", "all", "all-and-blank-lines"];
+  for (const whitespace of modes) {
+    await api.diff({ revision: "HEAD", path: "file", whitespace });
+    expect(calls.pop()).toEqual(["HEAD", "file", undefined, whitespace]);
+  }
+  for (const whitespace of ["", "ignore", "ALL", "--ignore-all-space", null, 123, true, [], {}]) {
+    await expect(api.diff({ revision: "HEAD", whitespace: whitespace as WhitespaceMode })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  }
+  expect(calls).toEqual([]);
+});
 
 test("revision validation preserves reader and API boundaries and layer-specific errors", async () => {
   const { reader, api } = await readers();

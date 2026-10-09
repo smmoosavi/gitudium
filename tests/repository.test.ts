@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
+import type { WhitespaceMode } from "../src/repository/types";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -42,6 +43,42 @@ async function commit(path: string, name: string, content: string | Uint8Array, 
   await git(path, "commit", "-m", subject);
   return git(path, "rev-parse", "HEAD");
 }
+
+test("diff whitespace modes distinguish trailing, internal and blank-line changes", async () => {
+  const directory = await fixture();
+  const changes = [
+    { path: "trailing.txt", before: "alpha beta\n", after: "alpha beta \t\n" },
+    { path: "internal.txt", before: "alpha beta\n", after: "\talpha\t beta\n" },
+    { path: "blank.txt", before: "alpha\nbeta\n", after: "alpha\n \t\nbeta\n" },
+    { path: "content.txt", before: "alpha\n", after: "gamma\n" },
+  ];
+  for (const file of changes) await writeFile(join(directory, file.path), file.before);
+  await git(directory, "add", ".");
+  await git(directory, "commit", "-m", "Before whitespace changes");
+  for (const file of changes) await writeFile(join(directory, file.path), file.after);
+  await git(directory, "add", ".");
+  await git(directory, "commit", "-m", "Whitespace and content changes");
+  const reader = await GitRepositoryReader.discover(directory);
+  const modes: WhitespaceMode[] = ["none", "trailing", "all", "all-and-blank-lines"];
+  const signal = new AbortController().signal;
+  expect(await reader.diff("HEAD")).toEqual(await reader.diff("HEAD", undefined, signal, "none"));
+  for (const mode of modes) {
+    const whole = await reader.diff("HEAD", undefined, signal, mode);
+    expect(whole.state).toBe("text");
+    for (const file of changes) {
+      const ignored = file.path === "trailing.txt" && mode !== "none"
+        || file.path === "internal.txt" && (mode === "all" || mode === "all-and-blank-lines")
+        || file.path === "blank.txt" && mode === "all-and-blank-lines";
+      const result = await reader.diff("HEAD", file.path, signal, mode);
+      expect(result.state).toBe("text");
+      if (result.state === "text") expect(result.patch.length > 0).toBe(!ignored);
+      if (whole.state === "text") expect(whole.patch.includes(`diff --git a/${file.path} b/${file.path}`)).toBe(!ignored);
+    }
+  }
+  const controller = new AbortController();
+  controller.abort();
+  await expect(reader.diff("HEAD", undefined, controller.signal, "all")).rejects.toMatchObject({ code: "CANCELLED" });
+});
 
 test("discovers empty repositories and subdirectories, rejects non-repositories", async () => {
   const path = await fixture();

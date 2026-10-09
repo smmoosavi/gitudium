@@ -39,7 +39,11 @@ export const appRouter = t.router({
     cursor: z.object({ snapshot: snapshotId, offset: z.number().int().min(0).max(1_000_000) }).optional(),
   }).optional()).query(({ ctx, input, signal }) => read(() => ctx.reader.history(input, signal))),
   commit: repositoryProcedure.input(z.object({ revision })).query(({ ctx, input, signal }) => read(() => ctx.reader.commit(input.revision, signal))),
-  diff: repositoryProcedure.input(z.object({ revision, path: path.optional() })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal))),
+  diff: repositoryProcedure.input(z.object({
+    revision,
+    path: path.optional(),
+    whitespace: z.enum(["none", "trailing", "all", "all-and-blank-lines"]).default("none"),
+  })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal, input.whitespace))),
   sources: repositoryProcedure.input(z.object({ revision, path })).query(({ ctx, input, signal }) => read(() => ctx.reader.sources(input.revision, input.path, signal))),
   health: t.procedure
     .input(z.object({ name: z.string().trim().min(1).max(80) }))

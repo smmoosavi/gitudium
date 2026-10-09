@@ -28,13 +28,14 @@ function gapControls(gap: ContextGap, onExpand?: (id: string, direction: "above"
   </span><span className="context-gap-label">{gap.count} hidden lines</span></span>;
 }
 
-export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansion = {}, full = false, onExpand, syntax }: { syntax?: SyntaxResult; patch: string; mode: DiffMode; wrap?: boolean; engine?: DiffEngine; sources?: ContextSources; expansion?: ContextExpansion; full?: boolean; onExpand?: (id: string, direction: "above" | "below") => void }) {
+export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansion = {}, full = false, onExpand, syntax, contextEnabled = true }: { contextEnabled?: boolean; syntax?: SyntaxResult; patch: string; mode: DiffMode; wrap?: boolean; engine?: DiffEngine; sources?: ContextSources; expansion?: ContextExpansion; full?: boolean; onExpand?: (id: string, direction: "above" | "below") => void }) {
   const base = useMemo(() => buildDiffModel(patch, engine), [patch, engine]);
-  const contextModel = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full) : pendingDiffContext(base), [base, sources, expansion, full]);
+  const contextModel = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full, !contextEnabled) : pendingDiffContext(base), [base, sources, expansion, full, contextEnabled]);
   const model = useMemo(() => applyDiffSyntax(contextModel, syntax), [contextModel, syntax]);
   const rows = model.split.filter(row => !("header" in row));
+  const expand = onExpand;
   if (mode === "unified") return <pre className={`patch${wrap ? " wrap-lines" : ""}`} aria-label="File diff"><code>{model.unified.filter(line => !line.metadata && line.kind !== "hunk").map((line, index) => <span key={index} className={line.gap ? "context-gap-row" : `unified-line ${line.kind ?? "context"}`}>
-    {line.gap ? gapControls(line.gap, onExpand) : <>
+    {line.gap ? gapControls(line.gap, expand) : <>
       <span className="line-number old-line-number" aria-hidden="true">{line.oldNumber ?? " "}</span>
       <span className="line-number new-line-number" aria-hidden="true">{line.newNumber ?? " "}</span>
       <span className="diff-prefix" aria-hidden="true">{line.prefix ?? " "}</span>
@@ -46,7 +47,7 @@ export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansio
       <div className="split-title">{side === "left" ? "Before" : "After"}</div>
       <pre><code>{rows.map((row, index) => {
         if ("header" in row) return null;
-        if ("gap" in row) return <span className="split-line context-gap-row" key={index}>{side === "left" ? gapControls(row.gap, onExpand) : <span className="context-gap"><span className="context-gap-label">{row.gap.count} hidden lines</span></span>}</span>;
+        if ("gap" in row) return <span className="split-line context-gap-row" key={index}>{side === "left" ? gapControls(row.gap, expand) : <span className="context-gap"><span className="context-gap-label">{row.gap.count} hidden lines</span></span>}</span>;
         const line = row[side];
         return <span className={`split-line ${line?.kind ?? "placeholder"}`} key={index}><span className="line-number" aria-hidden="true">{line?.number ?? " "}</span><span className="line-content">{inlineText(line?.text ?? "", line?.segments)}{line?.noNewline && <span className="no-newline" title="No newline at end of file"> ⏎ No newline at end of file</span>}</span></span>;
       })}</code></pre>

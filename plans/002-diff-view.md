@@ -90,10 +90,10 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 
 ### Step 6 — Whitespace controls
 
-- [ ] Add an ignore-whitespace option with a clearly defined comparison policy.
-- [ ] Optionally reveal tabs, spaces, and trailing whitespace without altering copied source text.
-- [ ] Make it clear when a comparison filter hides changes.
-- [ ] Test whitespace-only edits, indentation changes, wrapping, and preference behavior.
+- [x] Add four Git-backed comparison modes: Do not ignore (default); Trim whitespaces (`--ignore-space-at-eol`, trailing only); Ignore whitespaces (`--ignore-all-space`); Ignore whitespaces and empty lines (also `--ignore-blank-lines`, blank-line-only changes). These affect comparison, not stored source, and ignore-all can hide meaningful whitespace changes.
+- [ ] Optionally reveal tabs, spaces, and trailing whitespace without altering copied source text. Deferred; not part of the current four-mode selector.
+- [x] Make it clear when a comparison filter hides changes. Persist the selected mode, style active filtering, and explain empty filtered results. Filtered comparisons support context expansion and Full file using original old/new source content. Only changes present in the filtered diff are highlighted; ignored differences remain unhighlighted context. Unified context displays the new-side text when both sides exist. Complete sources remain available for worker syntax highlighting.
+- [x] Test whitespace-only edits, indentation changes, wrapping, and preference behavior. Targeted backend/API/renderer/context/syntax suites: 57 tests passed; typecheck passed.
 
 **Outcome:** Formatting noise can be separated from meaningful changes.
 

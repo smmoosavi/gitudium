@@ -13,13 +13,21 @@ function sourceLines(text?: string) {
   return lines;
 }
 
-export function pendingDiffContext(base: DiffModel): DiffModel {
+export function pendingDiffContext(base: DiffModel, sources?: ContextSources): DiffModel {
   const inferGaps = () => {
     let oldNext = 1;
     let newNext = 1;
-    return (header: string): ContextGap | undefined => {
+    let hasHunk = false;
+    return (header?: string): ContextGap | undefined => {
+      if (header === undefined) {
+        if (!sources || !hasHunk) return;
+        const count = sourceLines(sources.before?.text).length + 1 - oldNext;
+        const afterCount = sourceLines(sources.after?.text).length + 1 - newNext;
+        return count > 0 && count === afterCount ? { id: `${oldNext}:${newNext}:${count}`, count } : undefined;
+      }
       const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(header);
       if (!match) return;
+      hasHunk = true;
       const oldCount = Number(match[2] ?? 1);
       const newCount = Number(match[4] ?? 1);
       const oldStart = Number(match[1]) + (oldCount === 0 ? 1 : 0);
@@ -33,7 +41,7 @@ export function pendingDiffContext(base: DiffModel): DiffModel {
   };
   const splitGap = inferGaps();
   const unifiedGap = inferGaps();
-  return {
+  const result: DiffModel = {
     split: base.split.flatMap((row): DiffRow[] => {
       const gap = "header" in row ? splitGap(row.header) : undefined;
       return gap ? [{ gap }, row] : [row];
@@ -43,9 +51,14 @@ export function pendingDiffContext(base: DiffModel): DiffModel {
       return gap ? [{ text: "", gap }, line] : [line];
     }),
   };
+  const trailingSplit = splitGap();
+  const trailingUnified = unifiedGap();
+  if (trailingSplit) result.split.push({ gap: trailingSplit });
+  if (trailingUnified) result.unified.push({ text: "", gap: trailingUnified });
+  return result;
 }
 
-export function expandDiffContext(base: DiffModel, sources: ContextSources, expansion: ContextExpansion, full = false): DiffModel {
+export function expandDiffContext(base: DiffModel, sources: ContextSources, expansion: ContextExpansion, full = false, filtered = false): DiffModel {
   const before = sourceLines(sources.before?.text);
   const after = sourceLines(sources.after?.text);
   const rows: DiffRow[] = [];
@@ -53,8 +66,10 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
   let newNext = 1;
   let revealed = 0;
   const gap = (oldEnd: number, newEnd: number) => {
-    const count = oldEnd - oldNext;
-    if (count < 0 || count !== newEnd - newNext) throw new Error("Source and patch context do not align.");
+    const oldCount = oldEnd - oldNext;
+    const newCount = newEnd - newNext;
+    if (oldCount < 0 || newCount < 0 || (!filtered && oldCount !== newCount)) throw new Error("Source and patch context do not align.");
+    const count = Math.max(oldCount, newCount);
     if (!count) return;
     const id = `${oldNext}:${newNext}:${count}`;
     const requested = expansion[id] ?? { above: 0, below: 0 };
@@ -65,9 +80,17 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
     const append = (offset: number) => {
       const oldNumber = oldNext + offset;
       const newNumber = newNext + offset;
-      const text = before[oldNumber - 1];
-      if (text === undefined || text !== after[newNumber - 1]) throw new Error("Source and patch context do not match.");
-      rows.push({ left: { text, number: oldNumber, kind: "context", ...(oldNumber === before.length && !sources.before?.text.endsWith("\n") ? { noNewline: true } : {}) }, right: { text, number: newNumber, kind: "context", ...(newNumber === after.length && !sources.after?.text.endsWith("\n") ? { noNewline: true } : {}) } });
+      const text = offset < oldCount ? before[oldNumber - 1] : undefined;
+      const newText = offset < newCount ? after[newNumber - 1] : undefined;
+      if (filtered && (offset >= oldCount || offset >= newCount)) {
+        rows.push({
+          ...(text !== undefined ? { left: { text, number: oldNumber, kind: "context" as const, ...(oldNumber === before.length && !sources.before?.text.endsWith("\n") ? { noNewline: true } : {}) } } : {}),
+          ...(newText !== undefined ? { right: { text: newText, number: newNumber, kind: "context" as const, ...(newNumber === after.length && !sources.after?.text.endsWith("\n") ? { noNewline: true } : {}) } } : {}),
+        });
+        return;
+      }
+      if (text === undefined || newText === undefined || (!filtered && text !== newText)) throw new Error("Source and patch context do not match.");
+      rows.push({ left: { text, number: oldNumber, kind: "context", ...(oldNumber === before.length && !sources.before?.text.endsWith("\n") ? { noNewline: true } : {}) }, right: { text: newText, number: newNumber, kind: "context", ...(newNumber === after.length && !sources.after?.text.endsWith("\n") ? { noNewline: true } : {}) } });
     };
     for (let i = 0; i < above; i++) append(i);
     if (above + below < count) rows.push({ gap: { id, count: count - above - below } });
@@ -84,7 +107,11 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
         }
         rows.push(row);
       } else {
-        rows.push(row);
+        const sourceLine = (line?: DiffLine, text?: string): DiffLine | undefined => line && text !== undefined ? { ...line, text } : line;
+        rows.push(filtered ? {
+          left: sourceLine(row.left, row.left?.number === undefined ? undefined : before[row.left.number - 1]),
+          right: sourceLine(row.right, row.right?.number === undefined ? undefined : after[row.right.number - 1]),
+        } : row);
         if (row.left?.number !== undefined) oldNext = row.left.number + 1;
         if (row.right?.number !== undefined) newNext = row.right.number + 1;
       }
@@ -102,12 +129,16 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
     const row = rows[i]!;
     if ("header" in row) unified.push({ text: row.header, kind: "hunk", metadata: row.metadata });
     else if ("gap" in row) unified.push({ text: "", gap: row.gap });
-    else if (row.left?.kind === "context") appendLine(row.left, " ", row.right?.number);
+    else if (row.left?.kind === "context" || row.right?.kind === "context") {
+      const line = row.right ?? row.left!;
+      unified.push({ text: line.text, prefix: " ", oldNumber: row.left?.number, newNumber: row.right?.number, segments: line.segments });
+      if (line.noNewline) unified.push({ text: "\\ No newline at end of file", noNewline: true });
+    }
     else {
       const block: typeof row[] = [row];
       while (i + 1 < rows.length) {
         const next = rows[i + 1]!;
-        if ("header" in next || "gap" in next || next.left?.kind === "context") break;
+        if ("header" in next || "gap" in next || next.left?.kind === "context" || next.right?.kind === "context") break;
         block.push(next); i++;
       }
       for (const changed of block) if (changed.left) appendLine(changed.left, "-");

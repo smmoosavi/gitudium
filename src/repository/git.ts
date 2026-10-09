@@ -3,7 +3,7 @@ import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
 import type {
   ChangedFile, CommitDetails, DiffResult, HistoryPage,
-  HistoryQuery, Reference, RepositoryMetadata, RepositoryReader, SourceFile, SourceResult,
+  HistoryQuery, Reference, RepositoryMetadata, RepositoryReader, SourceFile, SourceResult, WhitespaceMode,
 } from "./types";
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
@@ -246,11 +246,14 @@ export class GitRepositoryReader implements RepositoryReader {
     };
   }
 
-  async diff(revision: string, path?: string, signal?: AbortSignal): Promise<DiffResult> {
+  async diff(revision: string, path?: string, signal?: AbortSignal, whitespace: WhitespaceMode = "none"): Promise<DiffResult> {
     if (path !== undefined) validatePath(path);
     const id = await this.resolve(revision, signal);
     const comparison = await this.comparison(id, signal);
-    const args = ["diff-tree", "--no-commit-id", "-r", "-p", "--root", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", ...comparison, "--", ...(path === undefined ? [] : [path])];
+    const whitespaceFlags = whitespace === "trailing" ? ["--ignore-space-at-eol"]
+      : whitespace === "all" ? ["--ignore-all-space"]
+      : whitespace === "all-and-blank-lines" ? ["--ignore-all-space", "--ignore-blank-lines"] : [];
+    const args = ["diff-tree", "--no-commit-id", "-r", "-p", "--root", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", ...whitespaceFlags, ...comparison, "--", ...(path === undefined ? [] : [path])];
     try {
       const patch = await this.run(args, signal, MAX_DIFF);
       return /^Binary files .* differ$/m.test(patch) ? { state: "binary" } : { state: "text", patch };

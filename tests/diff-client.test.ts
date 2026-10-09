@@ -5,7 +5,7 @@ import { DiffPatch } from "../src/client/DiffPatch";
 import { buildDiffModel, type DiffEngine } from "../src/client/diffModel";
 import { diffModeChange } from "../src/client/diffEngine";
 import { createWordHighlighter, patchHighlights } from "../src/client/wordDiff";
-import { diffStorageKey, effectiveDiffMode, readDiffMode, splitPatch, writeDiffMode, readDiffWrap, writeDiffWrap, wrapStorageKey } from "../src/client/diff";
+import { readWhitespaceMode, writeWhitespaceMode, whitespaceStorageKey, diffStorageKey, effectiveDiffMode, readDiffMode, splitPatch, writeDiffMode, readDiffWrap, writeDiffWrap, wrapStorageKey } from "../src/client/diff";
 
 test("raw metadata and hunk headers are hidden in both modes while source remains visible", () => {
   const patch = "diff --git a/old b/new\nold mode 100644\nnew mode 100755\nindex abc..def\n--- a/old\n+++ b/new\n@@ -1 +1 @@\n-old\n+new\n";
@@ -71,6 +71,49 @@ test("wrapped code keeps gutters in separate fixed grid columns in both modes", 
   expect(css).toContain("grid-template-columns: 6ch 6ch 2ch minmax(0, 1fr)");
   expect(css).toContain("grid-template-columns: 6ch minmax(0, 1fr)");
   expect(css).toContain(".patch.wrap-lines .line-content { white-space: pre-wrap;");
+});
+
+test("whitespace preference validates stored values and tolerates unavailable storage", () => {
+  let saved: string | null = null;
+  const storage = { getItem: () => saved, setItem: (key: string, value: string) => { expect(key).toBe(whitespaceStorageKey); saved = value; } };
+  expect(readWhitespaceMode(storage)).toBe("none");
+  for (const mode of ["none", "trailing", "all", "all-and-blank-lines"] as const) {
+    writeWhitespaceMode(storage, mode);
+    expect(readWhitespaceMode(storage)).toBe(mode);
+  }
+  saved = "invalid";
+  expect(readWhitespaceMode(storage)).toBe("none");
+  expect(readWhitespaceMode({ getItem: () => { throw Error(); } })).toBe("none");
+  expect(() => writeWhitespaceMode({ setItem: () => { throw Error(); } }, "all")).not.toThrow();
+});
+
+test("filtered comparisons expose working context controls and expand both source sides", () => {
+  const patch = "@@ -1 +1 @@\n-old\n+new\n";
+  const sources = { before: { text: "old\na \nb\n" }, after: { text: "new\na\nb\n" } };
+  for (const mode of ["unified", "split"] as const) {
+    const props = { patch, mode, contextEnabled: false, sources, onExpand: () => {} };
+    const html = renderToStaticMarkup(createElement(DiffPatch, props));
+    expect(html).toContain("2 hidden lines");
+    expect(html).not.toContain('disabled=""');
+    const expanded = renderToStaticMarkup(createElement(DiffPatch, { ...props, expansion: { "2:2:2": { above: 20, below: 0 } } }));
+    expect(expanded).not.toContain("hidden lines");
+    expect(expanded).toContain(mode === "split" ? "a " : ">a<");
+    expect(expanded).toContain("b");
+    expect((expanded.match(mode === "unified" ? /unified-line deletion/g : /split-line deletion/g) ?? []).length).toBe(1);
+    const full = renderToStaticMarkup(createElement(DiffPatch, { ...props, full: true }));
+    expect(full).not.toContain("hidden lines");
+    expect(full).toContain(mode === "split" ? "a " : ">a<");
+    expect(full).toContain("b");
+  }
+});
+
+test("filtered full file handles omitted blank-line insertions with unequal source lengths", () => {
+  for (const mode of ["unified", "split"] as const) {
+    const html = renderToStaticMarkup(createElement(DiffPatch, { patch: "@@ -1 +1 @@\n-old\n+new\n", mode, contextEnabled: false, full: true, sources: { before: { text: "old\n" }, after: { text: "new\n\n" } } }));
+    expect(html).not.toContain("hidden lines");
+    expect(html).toContain('2</span>');
+    expect((html.match(mode === "unified" ? /unified-line addition/g : /split-line addition/g) ?? []).length).toBe(1);
+  }
 });
 
 test("wrapping defaults off and persists safely", () => {
