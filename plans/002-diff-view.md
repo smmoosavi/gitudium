@@ -44,16 +44,16 @@ The current viewer supports unified and split modes, persisted line wrapping, an
 **Decision:** Use Shiki (TextMate grammars) in a reusable Web Worker. Implement step 5's bounded before/after source retrieval before this step so tokenization can begin at the start of each file, preserving multiline string/comment state. Fetching only nearby context cannot guarantee that state. The expandable-context UI itself is not a prerequisite for highlighting.
 
 - [ ] Load Shiki and tokenize only in the worker, with lazy loading of selected languages and a theme; measure worker bundle size, initialization cost, and result-application cost.
-- [ ] Render the existing diff immediately without syntax colors. Source loading and highlighting must not block the initial display or navigation.
-- [ ] Start highlighting after a trailing 100 ms debounce keyed to displayed commit, file, and content identity. Restart the timer when the displayed selection changes.
-- [ ] Reuse the worker and keep only the newest pending job rather than queueing every intermediate page during rapid navigation. Use request identities to discard stale results, including source-fetch responses; define worker cancellation/restart and timeout behavior for expensive active jobs.
-- [ ] Tokenize complete before/after source separately, using the exact comparison revisions and old/new paths from step 5, then map tokens to diff rows by source line numbers. Do not concatenate disjoint hunks or tokenize diff markers as source.
-- [ ] Return serializable token data, not HTML. Keep Shiki-specific logic behind a replaceable syntax-highlighting adapter and extend the stable render model only with library-independent styling data.
-- [ ] Combine syntax token boundaries with existing word-change spans so language colors and inline/whole-line change backgrounds coexist without changing source text.
-- [ ] Cache bounded results by immutable source identity, language, and theme; bound source size, token counts, worker execution, and rendered token volume. Keep repository content and language assets local rather than sending source to third-party services.
-- [ ] Use plain-text fallback for unknown languages, unavailable/oversized source, worker failures, or timeouts. If patch-only highlighting is offered, explicitly treat it as best-effort rather than multiline-correct.
-- [ ] Apply ready results without changing row order, line numbers, focus, text selection, or scroll position; verify contrast, wrapping, safe rendering, and both diff modes.
-- [ ] Test multiline constructs spanning omitted context, source-to-row mapping, rapid selection changes, debounce behavior, stale-result rejection, latest-job scheduling, cache bounds, and failure fallbacks.
+- [x] Render the existing diff immediately without syntax colors. Source loading and highlighting must not block the initial display or navigation.
+- [x] Start the first or isolated highlighting request immediately. Requests arriving within 100 ms of the previous request switch to a trailing 100 ms debounce keyed to source identity, restarting it on each rapid request.
+- [x] Reuse the worker and keep only the newest pending job rather than queueing every intermediate page during rapid navigation. Use request identities to discard stale results, including source-fetch responses; define worker cancellation/restart and timeout behavior for expensive active jobs.
+- [x] Tokenize complete before/after source separately, using the exact comparison revisions and old/new paths from step 5, then map tokens to diff rows by source line numbers. Do not concatenate disjoint hunks or tokenize diff markers as source.
+- [x] Return serializable token data, not HTML. Keep Shiki-specific logic behind a replaceable syntax-highlighting adapter and extend the stable render model only with library-independent styling data.
+- [x] Combine syntax token boundaries with existing word-change spans so language colors and inline/whole-line change backgrounds coexist without changing source text.
+- [x] Cache bounded results by immutable source identity, language, and theme; bound source size, token counts, worker execution, and rendered token volume. Keep repository content and language assets local rather than sending source to third-party services.
+- [x] Use plain-text fallback for unknown languages, unavailable/oversized source, worker failures, or timeouts. If patch-only highlighting is offered, explicitly treat it as best-effort rather than multiline-correct.
+- [x] Apply ready results without changing row order, line numbers, focus, text selection, or scroll position; verify contrast, wrapping, safe rendering, and both diff modes.
+- [x] Test multiline constructs spanning omitted context, source-to-row mapping, rapid selection changes, debounce behavior, stale-result rejection, latest-job scheduling, cache bounds, and failure fallbacks.
 
 **Outcome:** Diffs read like code rather than uniformly tinted text, while navigation and initial rendering remain responsive.
 
@@ -161,4 +161,16 @@ Validation:
 
 UI refinement: context controls use compact gutter icons with accessible labels/tooltips. Gaps of 20 lines or fewer show one expand-all button; larger gaps show two directional buttons. Both split sides use the same 40 px gap-row height and full-width background with no trailing padding. Validation: 22 focused tests and typecheck passed; browser measurements verified equal heights, aligned rows and zero unused right-side space in wrapped and unwrapped split layouts.
 
-Step 2 has not started.
+### Step 2 — Implemented on 2026-10-09
+
+Shiki runs only in a reusable ES-module worker, with locally bundled lazy grammars and the GitHub dark theme. Complete before/after files are tokenized independently; library-independent text/color tokens map to old/new source coordinates, including expanded context. Token boundaries combine with word-change boundaries without changing text, line order or layout.
+
+Highlighting starts immediately for the first request or after at least 100 ms without another request. Requests arriving within that window use a trailing 100 ms source-identity debounce; rapid requests restart the timer. Only the newest pending request is retained, stale results are discarded, and a 5-second timeout or worker failure terminates the worker so later requests can recover. The bounded immutable-source LRU retains at most four results and 200,000 tokens total. Source is capped at 1 MiB per side, results at 100,000 tokens and rendered styling at 50,000 segments; unknown languages and failures retain plain text. No source is sent to external services.
+
+Validation:
+
+- 39 focused tests passed, including debounce, newest-pending scheduling, stale responses, timeout/error recovery, cache/resource bounds, actual Shiki tokenization, source coordinates and word/syntax composition.
+- Typecheck, production client build and `git diff --check`: passed. Vite worker output uses ES format to support lazy imports.
+- Worker entry: 133.37 kB (43.22 kB gzip); all lazy language/theme assets total approximately 9.12 MB, not loaded eagerly. Main client entry: 347.83 kB (109.29 kB gzip).
+- Browser fixture verified deferred syntax application, correct comment coloring when the hunk starts inside a comment opened in omitted context, and colored word-change marks in split mode. Both modes have rendering tests. Further browser interaction was unavailable after the shared client disconnected.
+- Small-model token application averaged 0.008 ms over 10,000 iterations in Bun; this is not an end-to-end browser paint benchmark. Worker startup and large-result browser timings remain to be measured.

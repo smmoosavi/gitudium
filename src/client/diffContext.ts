@@ -62,15 +62,15 @@ export function expandDiffContext(base: DiffModel, sources: ContextSources, expa
     return base;
   }
   const unified: UnifiedDiffLine[] = [];
-  const appendLine = (line: DiffLine, prefix: string) => {
-    unified.push({ text: line.text, prefix, kind: line.kind === "context" ? undefined : line.kind, segments: line.segments });
+  const appendLine = (line: DiffLine, prefix: string, newNumber = line.number) => {
+    unified.push({ text: line.text, prefix, oldNumber: prefix !== "+" ? line.number : undefined, newNumber: prefix !== "-" ? newNumber : undefined, kind: line.kind === "context" ? undefined : line.kind, segments: line.segments });
     if (line.noNewline) unified.push({ text: "\\ No newline at end of file" });
   };
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
     if ("header" in row) unified.push({ text: row.header, kind: "hunk" });
     else if ("gap" in row) unified.push({ text: "", gap: row.gap });
-    else if (row.left?.kind === "context") appendLine(row.left, " ");
+    else if (row.left?.kind === "context") appendLine(row.left, " ", row.right?.number);
     else {
       const block: typeof row[] = [row];
       while (i + 1 < rows.length) {

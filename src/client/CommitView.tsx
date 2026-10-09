@@ -11,6 +11,7 @@ import { focusNavigationTarget, type FocusedPane } from "./navigation";
 import type { DetailNavigationAdapter } from "./useKeyboardNavigation";
 import { formatDate } from "./date";
 import { canShowFullFile, contextPageSize, type ContextExpansion } from "./diffContext";
+import { useSyntaxHighlighting } from "./useSyntaxHighlighting";
 
 export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef }: {
   navigationRef: RefObject<DetailNavigationAdapter | null>;
@@ -41,6 +42,7 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
   const [contextView, setContextView] = useState<{ key: string; expansion: ContextExpansion; full: boolean }>({ key: "", expansion: {}, full: false });
   const context = contextView.key === sourceKey ? contextView : { key: sourceKey, expansion: {}, full: false };
   const textSources = sources.data?.state === "text" ? sources.data : undefined;
+  const syntax = useSyntaxHighlighting(textSources);
   const fullAllowed = textSources !== undefined && canShowFullFile(textSources);
   const expand = (gap: string, direction: "above" | "below") => setContextView(previous => {
     const current = previous.key === sourceKey ? previous : { key: sourceKey, expansion: {}, full: false };
@@ -112,7 +114,7 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
         {sources.data?.state === "oversized" && <p role="status">File context exceeds the {sources.data.limitBytes.toLocaleString()} byte limit per side. Showing patch only.</p>}
         {(sources.data?.state === "binary" || sources.data?.state === "unavailable") && <p role="status">File context is unavailable. Showing patch only.</p>}
         {!diff.data.patch && <p>No textual changes.</p>}
-        <DiffPatch key={sourceKey} patch={diff.data.patch} mode={renderedMode} wrap={wrap} sources={textSources} expansion={context.expansion} full={context.full} onExpand={expand} />
+        <DiffPatch key={sourceKey} patch={diff.data.patch} mode={renderedMode} wrap={wrap} syntax={syntax} sources={textSources} expansion={context.expansion} full={context.full} onExpand={expand} />
       </>}
     </div>
     </section>

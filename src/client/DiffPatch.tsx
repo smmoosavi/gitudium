@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import type { DiffMode } from "./diff";
+import type { SyntaxResult } from "./syntaxTypes";
+import { applyDiffSyntax } from "./diffSyntax";
 import { buildDiffModel, type DiffEngine, type DiffSegment } from "./diffModel";
 
 function inlineText(text: string, segments?: DiffSegment[]) {
   return segments ? segments.map((segment, index) => segment.changed
-    ? <mark className="word-change" key={index}>{segment.text}</mark>
-    : segment.text) : text || " ";
+    ? <mark className="word-change" style={segment.color ? { color: segment.color } : undefined} key={index}>{segment.text}</mark>
+    : segment.color ? <span className="syntax-token" style={{ color: segment.color }} key={index}>{segment.text}</span> : segment.text) : text || " ";
 }
 
 import { contextPageSize, expandDiffContext, type ContextSources, type ContextExpansion, type ContextGap } from "./diffContext";
@@ -26,9 +28,10 @@ function gapControls(gap: ContextGap, onExpand?: (id: string, direction: "above"
   </span><span className="context-gap-label">{gap.count} hidden lines</span></span>;
 }
 
-export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansion = {}, full = false, onExpand }: { patch: string; mode: DiffMode; wrap?: boolean; engine?: DiffEngine; sources?: ContextSources; expansion?: ContextExpansion; full?: boolean; onExpand?: (id: string, direction: "above" | "below") => void }) {
+export function DiffPatch({ patch, mode, wrap = false, engine, sources, expansion = {}, full = false, onExpand, syntax }: { syntax?: SyntaxResult; patch: string; mode: DiffMode; wrap?: boolean; engine?: DiffEngine; sources?: ContextSources; expansion?: ContextExpansion; full?: boolean; onExpand?: (id: string, direction: "above" | "below") => void }) {
   const base = useMemo(() => buildDiffModel(patch, engine), [patch, engine]);
-  const model = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full) : base, [base, sources, expansion, full]);
+  const contextModel = useMemo(() => sources ? expandDiffContext(base, sources, expansion, full) : base, [base, sources, expansion, full]);
+  const model = useMemo(() => applyDiffSyntax(contextModel, syntax), [contextModel, syntax]);
   const rows = model.split;
   if (mode === "unified") return <pre className={`patch${wrap ? " wrap-lines" : ""}`} aria-label="File diff"><code>{model.unified.map((line, index) => <span key={index} className={line.gap ? "context-gap-row" : line.kind}>{line.gap ? gapControls(line.gap, onExpand) : <>{line.prefix}{inlineText(line.text, line.segments)}</>}</span>)}</code></pre>;
   return <div className={`split-patch${wrap ? " wrap-lines" : ""}`} style={wrap ? { gridTemplateRows: `auto repeat(${rows.length}, auto)` } : undefined} aria-label="Side-by-side file diff">
