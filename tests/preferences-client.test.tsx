@@ -4,7 +4,7 @@ import { useViewerPreferences } from "../src/client/useViewerPreferences";
 import { defaultLayout, layoutStorageKey } from "../src/client/layout";
 import { diffStorageKey, wrapStorageKey, pairingStorageKey, whitespaceStorageKey } from "../src/client/diff";
 import { filesStorageKey } from "../src/client/files";
-import { readPreference, writePreference, viewerPreferences, type Preference } from "../src/client/preferences";
+import { diffAlgorithmStorageKey, readPreference, writePreference, viewerPreferences, type Preference } from "../src/client/preferences";
 import { usePreference } from "../src/client/usePreference";
 
 function Preferences() {
@@ -54,6 +54,21 @@ test("shared preferences preserve existing keys and encodings", () => {
   expect(readPreference(viewerPreferences.layout, storage)).toEqual(defaultLayout());
   expect(readPreference(viewerPreferences.pairLines, storage)).toBe(true);
   expect(readPreference(viewerPreferences.whitespace, storage)).toBe("all");
+});
+
+test("diff algorithm validates, persists and migrates the previous pairing preference", () => {
+  const values = new Map<string, string>();
+  const storage = () => ({ getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } });
+  expect(readPreference(viewerPreferences.diffAlgorithm, storage)).toBe("simple");
+  values.set(pairingStorageKey, "true");
+  expect(readPreference(viewerPreferences.diffAlgorithm, storage)).toBe("paired");
+  values.set(diffAlgorithmStorageKey, "invalid");
+  expect(readPreference(viewerPreferences.diffAlgorithm, storage)).toBe("paired");
+  for (const mode of ["simple", "paired", "syntax"] as const) {
+    writePreference(viewerPreferences.diffAlgorithm, mode, storage);
+    expect(readPreference(viewerPreferences.diffAlgorithm, storage)).toBe(mode);
+  }
+  expect(readPreference(viewerPreferences.diffAlgorithm, () => { throw new Error("blocked"); })).toBe("simple");
 });
 
 test("generic preferences tolerate storage resolution, reader, and writer failures", () => {
