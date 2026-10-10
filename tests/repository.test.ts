@@ -527,3 +527,36 @@ test("non-commit refs with unborn HEAD produce empty history", async () => {
   const reader = await GitRepositoryReader.discover(path);
   expect(await reader.history()).toEqual({ commits: [], nextCursor: null });
 });
+
+test("saved ref exclusions omit roots, retain shared ancestors, and yield to explicit selections", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  await git(path, "checkout", "-b", "agent-work");
+  const agent = await commit(path, "agent", "agent", "agent");
+  await git(path, "update-ref", "refs/agents/team/task", agent);
+  await git(path, "checkout", "main");
+  await git(path, "branch", "-D", "agent-work");
+  const main = await commit(path, "main", "main", "main");
+  await git(path, "branch", "foo", agent);
+  await git(path, "branch", "bar", agent);
+  const reader = await GitRepositoryReader.discover(path);
+  const exclude = " refs/agents/*, foo, bar, , missing ";
+  const page = await reader.history({ exclude });
+  expect(page.commits.map(item => item.id)).toEqual([main, root]);
+  expect((await reader.history({ revision: "all", exclude })).commits.map(item => item.id)).toEqual([main, root]);
+  expect((await reader.history({ revision: "refs/agents/team/task", exclude })).commits.map(item => item.id)).toEqual([agent, root]);
+  const override = await reader.history({ revision: "all, refs/agents/*", exclude });
+  expect(override.commits.map(item => item.id).sort()).toEqual([main, agent, root].sort());
+  expect(override.commits.find(item => item.id === agent)?.references).toContain("refs/agents/team/task");
+  expect(override.commits.find(item => item.id === agent)?.references).not.toContain("refs/heads/foo");
+  expect((await reader.history({ revision: "!foo", exclude })).commits.map(item => item.id)).toEqual([main]);
+  await git(path, "update-ref", "refs/agents/shared", main);
+  const first = await reader.history({ exclude, limit: 1 });
+  expect(first.commits[0].references).not.toContain("refs/agents/shared");
+  expect(first.nextCursor).not.toBeNull();
+  expect((await reader.history({ cursor: first.nextCursor!, limit: 10 })).commits.map(item => item.id)).toEqual([root]);
+  await expect(reader.history({ cursor: first.nextCursor!, exclude })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  await expect(reader.history({ exclude: "--all" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  await git(path, "checkout", "--detach", agent);
+  expect((await reader.history({ exclude })).commits.map(item => item.id)).toContain(agent);
+});

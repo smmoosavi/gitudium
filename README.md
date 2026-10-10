@@ -58,6 +58,10 @@ Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
 3. Select a changed file to view its diff.
 4. Scroll through history. The initial request loads up to 10,000 commit summaries in topological order; another chunk loads automatically near the bottom. Loaded chunks stay in browser memory without a total-count cap, while only visible rows and a small overscan are rendered. Commit messages, changed files, and diffs load when selected. Git output is still subject to the server's 8 MiB per-command safety limit.
 
+Use the **gear icon at the right of the Log header** to save **Exclude refs**, for example `refs/agents/*, foo, bar`. Commas separate patterns; whitespace around entries and empty entries are ignored. Full names match their ref namespace; bare names such as `foo` match local branches (`refs/heads/foo`). A trailing `/*` covers nested refs. Unmatched patterns are harmless.
+
+Saved exclusions omit matching refs from the default/all-reference history roots and hide their log labels, using Git's `--exclude` semantics rather than removing shared ancestors. Commits reachable from another included ref or HEAD still appear. Explicit positive selections in **References** (including globs and `all, refs/agents/my-task`) override saved exclusions; `all` alone does not. Selector `!` expressions still remove reachable history as described above. Excluded refs remain available in autocomplete so they can be explicitly selected. Save applies immediately and clears the selected commit; Cancel or Escape discards edits. The setting persists across reloads and repositories on the same browser origin.
+
 Pagination cursors contain only a fixed-size snapshot ID and an offset, so URLs do not grow with the number of references. The server retains immutable history tips for the 128 most recently used snapshots, preserving pagination order when references change. After server restart or snapshot eviction, reload history to obtain a new cursor.
 
 The history chunk size and server request maximum share `HISTORY_CHUNK_SIZE` in [src/repository/limits.ts](src/repository/limits.ts). Change that constant to tune both together. Timeout durations and scroll distances are unrelated settings.
@@ -181,6 +185,12 @@ The build creates the single-file `gitudium` executable at the checkout root. Yo
 Run `pnpm run dev` (optionally with `--port <backend-port>` and `--directory <repository>`). Vite serves the browser on `http://127.0.0.1:5173` and proxies `/api` to the loopback backend, which defaults to port 3000 and requires a nonzero port. Open the full development URL printed by the backend. The launcher shares a fresh token with the backend; `pnpm run dev:server` alone generates its own token unless `GITUDIUM_DEV_TOKEN` is supplied.
 
 Both startup paths use `src/server/server.ts` for access protection, API routing, and shutdown. Development explicitly allows the Vite browser origin and serves no backend assets; the packaged entrypoint supplies embedded assets and allows only its own origin. CLI defaults, printed URLs, and the single-file distribution are unchanged. SIGINT/SIGTERM close repository discovery, monitoring, event streams, and the listener before exiting. Importable factory instances own those resources and must be disposed with `await instance.close()`; tests using `createRequestHandler` directly must also close their handlers.
+
+### Persistent client settings
+
+Client settings use typed descriptors in `src/client/preferences.ts` and the shared `usePreference` hook in `src/client/usePreference.ts`. A descriptor supplies a default factory and storage read/write functions; readers must validate stored values and fall back for missing or malformed data. Define descriptors at module scope so their identity stays stable between renders. The hook loads once and persists state changes, including functional updates, while tolerating unavailable or full local storage.
+
+Existing versioned storage keys and encodings are preserved. Settings are browser-origin-wide (not repository-specific); changing the host or port uses a different store. Do not store access tokens or repository contents in these preferences. Repository-specific settings should use an explicit repository scope when introduced. Saved ref exclusions are persisted; the current References selector expression remains temporary.
 
 ### Validation
 

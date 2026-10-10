@@ -12,6 +12,8 @@ import { HistoryPane } from "./HistoryPane";
 import { useRepositoryQueries } from "./useRepositoryQueries";
 import { useLiveConnection } from "./useLiveConnection";
 import { useViewerPreferences } from "./useViewerPreferences";
+import { viewerPreferences } from "./preferences";
+import { usePreference } from "./usePreference";
 import { useCommitSelection } from "./useCommitSelection";
 import { useSyntaxService } from "./useSyntaxService";
 
@@ -35,7 +37,8 @@ export function App() {
   const historyRef = useRef<HTMLElement>(null);
   const commitListRef = useRef<CommitListHandle>(null);
   const connection = useLiveConnection(token!);
-  const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision);
+  const [refExclusions, setRefExclusions] = usePreference(viewerPreferences.refExclusions);
+  const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision, refExclusions);
   const detailNavigationRef = useRef<DetailNavigationAdapter | null>(null);
   useKeyboardNavigation({
     focusedPane,
@@ -67,6 +70,7 @@ export function App() {
     </div>
     <div ref={viewerRef} className={`viewer layout-${mode}`} style={{ gridTemplateColumns: columns, gridTemplateRows: mode === "columns" ? "minmax(0, 1fr)" : split(sizes.secondary) }}>
       <HistoryPane historyRef={historyRef} commitListRef={commitListRef} focusedPane={focusedPane} onPaneFocus={setFocusedPane}
+        refExclusions={refExclusions} onRefExclusionsChange={value => { setRefExclusions(value); setSelected(null); setFocusedPane("commits"); }}
         revision={revision} onRevisionChange={value => { setRevision(value); setSelected(null); setFocusedPane("commits"); }}
         references={references.data} referencesPending={references.isPending} referencesSuccess={references.isSuccess}
         referencesError={references.isError ? references.error : null} onReferencesRetry={() => void references.refetch()}

@@ -13,6 +13,15 @@ export function isHistoryExpression(value: unknown): value is string {
   });
 }
 
+export function isRefExclusions(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 1024 || /[\x00-\x1f\x7f]/.test(value)) return false;
+  return value.split(",").every(part => !part.trim() || isRevision(part.trim()) && !part.trim().startsWith("!"));
+}
+
+export function refExclusionPatterns(value: string): string[] {
+  return [...new Set(value.split(",").map(part => part.trim()).filter(Boolean))];
+}
+
 export function isLiteralPath(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && !value.startsWith("/")
     && !value.includes("\0") && !value.split("/").some(part => !part || part === "." || part === "..");

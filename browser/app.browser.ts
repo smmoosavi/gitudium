@@ -116,3 +116,55 @@ test("live invalidation refreshes history without replacing older details or ste
   await expect(page.locator('[data-commit-index="0"] strong')).toHaveText("Fixture commit 300");
   await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 119");
 });
+
+test("view preferences persist across commit switches and reloads", async ({ page, repository }) => {
+  await page.locator('[data-commit-index="0"]').click();
+  const pairing = page.getByRole("button", { name: "Pair lines", exact: true });
+  const whitespace = page.getByRole("button", { name: "Ignore whitespace changes", exact: true });
+  const wrap = page.getByRole("button", { name: "Wrap diff lines", exact: true });
+  await pairing.click();
+  await whitespace.click();
+  await wrap.click();
+  await expect.poll(() => page.evaluate(() => ({
+    pair: localStorage.getItem("gitudium.diff-pairing.v1"),
+    whitespace: localStorage.getItem("gitudium.diff-whitespace.v1"),
+    wrap: localStorage.getItem("gitudium.diff-wrap.v1"),
+  }))).toEqual({ pair: "true", whitespace: "all", wrap: "true" });
+  await page.locator('[data-commit-index="1"]').click();
+  await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 1");
+  for (const button of [pairing, whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await page.locator('[data-commit-index="0"]').click();
+  for (const button of [pairing, whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
+  await pairing.click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("gitudium.diff-pairing.v1"))).toBe("false");
+});
+
+test("log exclusion settings save, reload, and combine with the reference selector", async ({ page, repository }) => {
+  const gear = page.getByRole("button", { name: "Log settings", exact: true });
+  await page.locator('[data-commit-index="0"]').click();
+  await gear.click();
+  const input = page.getByRole("textbox", { name: "Exclude refs" });
+  await expect(input).toBeFocused();
+  await input.fill("refs/agents/*, foo, bar");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".commit-summary")).toHaveCount(0);
+  await expect.poll(() => repository.requests.filter(request => request.method === "history").at(-1)?.input?.exclude).toBe("refs/agents/*, foo, bar");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("gitudium.ref-exclusions.v1"))).toBe("refs/agents/*, foo, bar");
+  const refs = page.getByRole("combobox", { name: "References" });
+  await refs.fill("refs/heads/feature");
+  await refs.press("Enter");
+  await expect.poll(() => repository.requests.filter(request => request.method === "history").at(-1)?.input).toMatchObject({ revision: "refs/heads/feature", exclude: "refs/agents/*, foo, bar" });
+  await gear.click();
+  await input.fill("--all");
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await input.press("Escape");
+  await expect(gear).toBeFocused();
+  await page.reload();
+  await gear.click();
+  await expect(input).toHaveValue("refs/agents/*, foo, bar");
+  await input.fill("");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("gitudium.ref-exclusions.v1"))).toBe("");
+  await expect.poll(() => repository.requests.filter(request => request.method === "history").at(-1)?.input?.exclude).toBeUndefined();
+});

@@ -5,12 +5,12 @@ import { HISTORY_CHUNK_SIZE } from "../repository/limits";
 import { nextHistoryCursor } from "./history";
 import { api } from "./api";
 
-export function useRepositoryQueries(revision: string) {
+export function useRepositoryQueries(revision: string, exclude = "") {
   const metadata = useQuery({ queryKey: ["metadata"], queryFn: ({ signal }) => api.metadata.query(undefined, { signal }), retry: false });
   const references = useQuery({ queryKey: ["references"], enabled: metadata.isSuccess, queryFn: ({ signal }) => api.references.query(undefined, { signal }), retry: false });
   const history = useInfiniteQuery({
-    queryKey: ["history", revision], enabled: metadata.isSuccess && references.isSuccess, initialPageParam: undefined as HistoryCursor | undefined,
-    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, limit: HISTORY_CHUNK_SIZE, cursor: pageParam }, { signal }),
+    queryKey: ["history", revision, exclude], enabled: metadata.isSuccess && references.isSuccess, initialPageParam: undefined as HistoryCursor | undefined,
+    queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, exclude: pageParam ? undefined : exclude || undefined, limit: HISTORY_CHUNK_SIZE, cursor: pageParam }, { signal }),
     getNextPageParam: nextHistoryCursor, retry: false,
   });
   const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);

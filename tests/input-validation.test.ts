@@ -114,3 +114,17 @@ test("literal path validation preserves the API-only length cap and layer-specif
   await expect(api.diff({ revision: "HEAD", path: "../file" })).rejects.toThrow("Expected a repository-relative path.");
   await expect(api.sources({ revision: "HEAD" } as { revision: string; path: string })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 });
+
+test("ref exclusion validation is shared by API and reader", async () => {
+  const { reader, api } = await readers();
+  for (const [exclude, valid] of [
+    ["", true], [" , ", true], ["refs/agents/*, foo, bar", true], ["refs/agents/*,,missing", true],
+    ["refs/heads/*", true], ["--all", false], ["!main", false], ["foo bar", false],
+    ["foo\n", false], ["foo\0", false], ["a".repeat(1025), false], [123, false],
+  ] as const) {
+    await expect(reader.history({ exclude: exclude as string })).rejects.toMatchObject(valid
+      ? { code: "GIT_FAILED" } : { code: "INVALID_INPUT" });
+    await expect(api.history({ exclude: exclude as string })).rejects.toMatchObject(valid
+      ? { message: "accepted input" } : { code: "BAD_REQUEST" });
+  }
+});

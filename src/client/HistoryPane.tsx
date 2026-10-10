@@ -3,6 +3,7 @@ import { CommitList, type CommitListHandle } from "./CommitList";
 import type { CommitSummary, Reference } from "../repository/types";
 import { Failure } from "./Failure";
 import { ReferenceSelector } from "./ReferenceSelector";
+import { LogSettings } from "./LogSettings";
 import type { FocusedPane } from "./navigation";
 
 interface HistoryPaneProps {
@@ -10,6 +11,8 @@ interface HistoryPaneProps {
   commitListRef: Ref<CommitListHandle>;
   focusedPane: FocusedPane;
   onPaneFocus: (pane: FocusedPane) => void;
+  refExclusions?: string;
+  onRefExclusionsChange?: (value: string) => void;
   revision: string;
   onRevisionChange: (revision: string) => void;
   references: Reference[] | undefined;
@@ -30,7 +33,7 @@ interface HistoryPaneProps {
   fetchingNextPage: boolean;
 }
 
-export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocus, revision, onRevisionChange,
+export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocus, revision, onRevisionChange, refExclusions = "", onRefExclusionsChange,
   references, referencesPending, referencesSuccess, referencesError, onReferencesRetry,
   historyPending, historySuccess, historyError, onHistoryRetry, commits, head, selected, onSelect,
   canLoadMore, onLoadMore, fetchingNextPage }: HistoryPaneProps) {
@@ -48,7 +51,7 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
   };
   return (
       <section ref={historyRef} className={`history-panel${focusedPane === "commits" ? " pane-focused" : ""}`} aria-labelledby="history-title" onPointerDown={() => onPaneFocus("commits")} onFocusCapture={() => onPaneFocus("commits")}>
-        <div className="panel-heading"><h2 id="history-title">Log</h2></div>
+        <div className="panel-heading log-heading"><h2 id="history-title">Log</h2>{onRefExclusionsChange && <LogSettings value={refExclusions} onChange={onRefExclusionsChange} />}</div>
         <div className="history-toolbar">
         <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} onCommitFocus={focusCommits} /></div>
         {referencesPending && <p role="status">Loading references…</p>}

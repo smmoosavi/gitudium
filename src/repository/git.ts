@@ -8,7 +8,7 @@ import type {
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
 import { GitRunner, MAX_OUTPUT } from "./runner";
-import { isRevision, isHistoryExpression, isLiteralPath } from "./validation";
+import { isRevision, isHistoryExpression, isRefExclusions, refExclusionPatterns, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
 const MAX_HISTORY_SNAPSHOTS = 128;
@@ -31,7 +31,7 @@ function validatePath(path: string): void {
 
 export class GitRepositoryReader implements RepositoryReader {
   private readonly runner: GitRunner;
-  private readonly historySnapshots = new Map<string, string[]>();
+  private readonly historySnapshots = new Map<string, { tips: string[]; revision: string; exclude: string }>();
 
   private constructor(cwd: string) {
     this.runner = new GitRunner(cwd);
@@ -91,8 +91,8 @@ export class GitRepositoryReader implements RepositoryReader {
     return parseReferences(output);
   }
 
-  private async allHistoryTips(signal?: AbortSignal): Promise<string[]> {
-    const output = await this.run(["rev-parse", "--all"], signal);
+  private async allHistoryTips(signal?: AbortSignal, exclusions: string[] = []): Promise<string[]> {
+    const output = await this.run(["rev-parse", ...exclusions.map(pattern => `--exclude=${pattern}`), "--all"], signal);
     const ids = [...new Set(output.trim() ? output.trim().split("\n") : [])];
     const tips: string[] = [];
     if (ids.length) {
@@ -110,13 +110,15 @@ export class GitRepositoryReader implements RepositoryReader {
     return tips;
   }
 
-  private async historyTips(expression: string, signal?: AbortSignal): Promise<string[]> {
+  private async historyTips(expression: string, signal?: AbortSignal, exclude = ""): Promise<string[]> {
     if (!isHistoryExpression(expression)) invalid("Expected a history revision expression.");
+    if (!isRefExclusions(exclude)) invalid("Expected comma-separated ref exclusion patterns.");
+    const exclusions = refExclusionPatterns(exclude).map(pattern => pattern.startsWith("refs/") ? pattern : `refs/heads/${pattern}`);
     const terms = expression.trim() ? expression.split(",").map(term => term.trim()) : [];
     const positive = new Set<string>();
     const negative = new Set<string>();
     if (!terms.some(term => !term.startsWith("!"))) {
-      for (const id of await this.allHistoryTips(signal)) positive.add(id);
+      for (const id of await this.allHistoryTips(signal, exclusions)) positive.add(id);
     }
     let refs: Reference[] | undefined;
     for (const term of terms) {
@@ -124,7 +126,7 @@ export class GitRepositoryReader implements RepositoryReader {
       const revision = excluded ? term.slice(1) : term;
       const selected = excluded ? negative : positive;
       if (revision === "all") {
-        for (const id of await this.allHistoryTips(signal)) selected.add(id);
+        for (const id of await this.allHistoryTips(signal, excluded ? [] : exclusions)) selected.add(id);
       } else if (/[*?\[]/.test(revision)) {
         refs ??= await this.references(signal);
         const glob = new Bun.Glob(revision);
@@ -151,8 +153,10 @@ export class GitRepositoryReader implements RepositoryReader {
   async history(query: HistoryQuery = {}, signal?: AbortSignal): Promise<HistoryPage> {
     const limit = query.limit ?? 50;
     if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_CHUNK_SIZE) invalid(`History limit must be between 1 and ${HISTORY_CHUNK_SIZE}.`);
-    if (query.cursor && query.revision !== undefined) invalid("Use either a cursor or a revision, not both.");
+    if (query.cursor && (query.revision !== undefined || query.exclude !== undefined)) invalid("Use either a cursor or revision/exclusion settings, not both.");
     let tips: string[];
+    let revision = query.revision ?? "";
+    let exclude = query.exclude ?? "";
     let snapshot: string | undefined;
     let offset = 0;
     if (query.cursor) {
@@ -161,22 +165,33 @@ export class GitRepositoryReader implements RepositoryReader {
       snapshot = cursor.snapshot;
       const saved = this.historySnapshots.get(snapshot);
       if (!saved) invalid("History cursor expired; reload history to start a new snapshot.");
-      tips = saved;
+      ({ tips, revision, exclude } = saved);
       this.historySnapshots.delete(snapshot);
-      this.historySnapshots.set(snapshot, tips);
+      this.historySnapshots.set(snapshot, saved);
       offset = cursor.offset;
     } else {
-      tips = await this.historyTips(query.revision === undefined ? "" : query.revision, signal);
+      tips = await this.historyTips(query.revision === undefined ? "" : query.revision, signal, query.exclude ?? "");
     }
     if (!tips.some(tip => !tip.startsWith("^"))) return { commits: [], nextCursor: null };
-    const refs = referenceNames(await this.references(signal));
+    const exclusions = refExclusionPatterns(exclude).map(pattern => pattern.startsWith("refs/") ? pattern : `refs/heads/${pattern}`);
+    const explicit = revision.split(",").map(term => term.trim()).filter(term => term && term !== "all" && !term.startsWith("!"));
+    const matcher = (pattern: string) => {
+      const glob = new Bun.Glob(pattern);
+      return (name: string) => glob.match(name) || pattern.endsWith("/*") && name.startsWith(pattern.slice(0, -1));
+    };
+    const excludedRefs = exclusions.map(matcher);
+    const selectedRefs = explicit.map(matcher);
+    const refs = referenceNames((await this.references(signal)).filter(ref => {
+      const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
+      return !excludedRefs.some(matches => matches(ref.name)) || selectedRefs.some(matches => matches(ref.name) || matches(shorthand));
+    }));
     const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY_FORMAT}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
     const commits = parseSummaries(output, refs);
     if (commits.length <= limit) return { commits, nextCursor: null };
-    snapshot ??= createHash("sha256").update(tips.join("\n")).digest("hex");
+    snapshot ??= createHash("sha256").update(JSON.stringify({ tips, revision, exclude })).digest("hex");
     // Keep immutable tips server-side; cursor size must not grow with ref count.
     this.historySnapshots.delete(snapshot);
-    this.historySnapshots.set(snapshot, tips);
+    this.historySnapshots.set(snapshot, { tips, revision, exclude });
     while (this.historySnapshots.size > MAX_HISTORY_SNAPSHOTS) {
       this.historySnapshots.delete(this.historySnapshots.keys().next().value!);
     }

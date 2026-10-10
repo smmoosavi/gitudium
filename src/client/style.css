@@ -222,3 +222,11 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
   .commits button { transition: background-color 100ms ease, padding-left 160ms ease-out; }
   .commits button .commit-graph-window, .graph-horizontal-scroll { transition: width 160ms ease-out; }
 }
+
+.log-heading { position: relative; }
+.log-settings-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 3px; }
+.log-settings { position: absolute; z-index: 20; top: 100%; left: 8px; right: 8px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px #0008; }
+.log-settings label { display: block; margin-bottom: 6px; font-weight: 600; }
+.log-settings input { width: 100%; min-width: 0; font: inherit; color: inherit; background: #25262a; border: 1px solid #50535a; border-radius: 4px; padding: 5px 8px; }
+.log-settings p { margin: 8px 0; font-size: 11px; color: var(--muted); }
+.log-settings-actions { display: flex; justify-content: flex-end; gap: 8px; }
