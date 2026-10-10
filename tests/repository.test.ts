@@ -138,14 +138,15 @@ test("history expressions union revisions, match full and shorthand refs, and ex
   const tip = await commit(path, "tip", "tip", "tip");
   await git(path, "update-ref", "refs/remotes/origin/main", tip);
   await git(path, "update-ref", "refs/agents/session", root);
+  await git(path, "update-ref", "refs/agents/team/session", middle);
   await git(path, "branch", "docs/guide", middle);
   await git(path, "tag", "release", middle);
   const reader = await GitRepositoryReader.discover(path);
   const ids = async (revision: string) => (await reader.history({ revision })).commits.map(item => item.id);
   expect(await ids("HEAD, main, origin/main")).toEqual([tip, middle, root]);
   expect(await ids("main,!vis")).toEqual([tip, middle]);
-  expect(await ids("main,!refs/agents/*")).toEqual([tip, middle]);
-  expect(await ids("!refs/agents/*")).toEqual([tip, middle]);
+  expect(await ids("main,!refs/agents/*")).toEqual([tip]);
+  expect(await ids("!refs/agents/*")).toEqual([tip]);
   expect(await ids("docs/*")).toEqual([middle, root]);
   expect(await ids("refs/heads/docs/*")).toEqual([middle, root]);
   expect(await ids("origin/*")).toEqual([tip, middle, root]);

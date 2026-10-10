@@ -130,7 +130,9 @@ export class GitRepositoryReader implements RepositoryReader {
         const glob = new Bun.Glob(revision);
         for (const ref of refs) {
           const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
-          if (glob.match(ref.name) || glob.match(shorthand)) {
+          const matches = (value: string) => glob.match(value)
+            || revision.endsWith("/*") && value.startsWith(revision.slice(0, -1));
+          if (matches(ref.name) || matches(shorthand)) {
             // Resolve the full ref to peel nested annotated tags, too.
             try { selected.add(await this.resolve(ref.name, signal)); } catch (error) {
               if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
