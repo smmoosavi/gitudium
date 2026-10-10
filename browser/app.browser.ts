@@ -142,25 +142,29 @@ test("live invalidation refreshes history without replacing older details or ste
 
 test("view preferences persist across commit switches and reloads", async ({ page, repository }) => {
   await page.locator('[data-commit-index="0"]').click();
-  const pairing = page.getByRole("button", { name: "Pair lines", exact: true });
+  const pairing = page.getByRole("button", { name: /^Diff algorithm:/ });
   const whitespace = page.getByRole("button", { name: "Ignore whitespace changes", exact: true });
   const wrap = page.getByRole("button", { name: "Wrap diff lines", exact: true });
   await pairing.click();
   await whitespace.click();
   await wrap.click();
   await expect.poll(() => page.evaluate(() => ({
-    pair: localStorage.getItem("gitudium.diff-pairing.v1"),
+    pair: localStorage.getItem("gitudium.diff-algorithm.v1"),
     whitespace: localStorage.getItem("gitudium.diff-whitespace.v1"),
     wrap: localStorage.getItem("gitudium.diff-wrap.v1"),
-  }))).toEqual({ pair: "true", whitespace: "all", wrap: "true" });
+  }))).toEqual({ pair: "paired", whitespace: "all", wrap: "true" });
   await page.locator('[data-commit-index="1"]').click();
   await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 1");
-  for (const button of [pairing, whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(pairing).toHaveAttribute("data-algorithm", "paired");
+  for (const button of [whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
   await page.reload();
   await page.locator('[data-commit-index="0"]').click();
-  for (const button of [pairing, whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(pairing).toHaveAttribute("data-algorithm", "paired");
+  for (const button of [whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
   await pairing.click();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("gitudium.diff-pairing.v1"))).toBe("false");
+  await expect(pairing).toHaveAttribute("data-algorithm", "syntax");
+  await pairing.click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("gitudium.diff-algorithm.v1"))).toBe("simple");
 });
 
 test("log exclusion settings save, reload, and combine with the reference selector", async ({ page, repository }) => {

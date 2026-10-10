@@ -66,7 +66,7 @@ export type ChangeBlock = {
   highlights: Map<number, DiffSegment[]>;
 };
 
-export function patchChangeBlocks(patch: string, align?: LineAligner): ChangeBlock[] {
+export function patchChangeBlocks(patch: string, align?: LineAligner, syntax?: { align: (removed: number[], added: number[], before: string[], after: string[]) => LinePair[]; highlight: (oldIndex: number, newIndex: number) => InlineChange | undefined }): ChangeBlock[] {
   const blocks: ChangeBlock[] = [];
   const highlight = createWordHighlighter();
   const lines = patch.split("\n");
@@ -76,13 +76,13 @@ export function patchChangeBlocks(patch: string, align?: LineAligner): ChangeBlo
   const flush = () => {
     if (!removed.length && !added.length) return;
     const highlights = new Map<number, DiffSegment[]>();
-    const pairs = align ? align(removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : Array.from({ length: Math.max(removed.length, added.length) }, (_, index) => ({ before: index < removed.length ? index : undefined, after: index < added.length ? index : undefined }));
+    const pairs = syntax ? syntax.align(removed, added, removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : align ? align(removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : Array.from({ length: Math.max(removed.length, added.length) }, (_, index) => ({ before: index < removed.length ? index : undefined, after: index < added.length ? index : undefined }));
     if (Math.max(removed.length, added.length) <= maxBlockLines) {
       for (const pair of pairs) {
         if (pair.before === undefined || pair.after === undefined) continue;
         const oldIndex = removed[pair.before]!;
         const newIndex = added[pair.after]!;
-        const change = highlight(lines[oldIndex]!.slice(1), lines[newIndex]!.slice(1));
+        const change = syntax?.highlight(oldIndex, newIndex) ?? highlight(lines[oldIndex]!.slice(1), lines[newIndex]!.slice(1));
         if (change) {
           highlights.set(oldIndex, change.before);
           highlights.set(newIndex, change.after);

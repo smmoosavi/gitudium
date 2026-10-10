@@ -31,7 +31,20 @@ export function writePreference<T>(preference: Preference<T>, value: T, storage:
   catch { /* Preferences remain usable when storage is blocked or full. */ }
 }
 
+export type DiffAlgorithm = "simple" | "paired" | "syntax";
+export const diffAlgorithmStorageKey = "gitudium.diff-algorithm.v1";
+const diffAlgorithm: Preference<DiffAlgorithm> = {
+  defaultValue: () => "simple",
+  read: storage => {
+    const saved = storage.getItem(diffAlgorithmStorageKey);
+    if (saved === "simple" || saved === "paired" || saved === "syntax") return saved;
+    return readLinePairing(storage) ? "paired" : "simple";
+  },
+  write: (storage, value) => storage.setItem(diffAlgorithmStorageKey, value),
+};
+
 export const viewerPreferences = {
+  diffAlgorithm,
   refExclusions,
   wrap: { defaultValue: () => false, read: readDiffWrap, write: writeDiffWrap },
   filesMode: { defaultValue: () => "list" as const, read: readFilesMode, write: writeFilesMode },
