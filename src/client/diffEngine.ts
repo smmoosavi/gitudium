@@ -36,6 +36,12 @@ export function createDiffEngine(pairLines = false, syntax?: MatchResult): DiffE
         if (![...removed, ...added].every(index => tokens.has(index))) return fallback();
         return matcher.align(before, after, removed.map(index => tokens.get(index)!), added.map(index => tokens.get(index)!), fallback);
       },
+      highlightBlock: (removed, added) => {
+        if (!removed.length || !added.length || Math.max(removed.length, added.length) > 100 || ![...removed, ...added].every(index => tokens.has(index))) return;
+        const result = matcher.highlightBlock(removed.map(index => tokens.get(index)!), added.map(index => tokens.get(index)!));
+        if (!result) return;
+        return new Map([...removed.map((index, row) => [index, result.before[row]!] as const), ...added.map((index, row) => [index, result.after[row]!] as const)]);
+      },
       highlight: (oldIndex, newIndex) => {
         const before = tokens.get(oldIndex);
         const after = tokens.get(newIndex);

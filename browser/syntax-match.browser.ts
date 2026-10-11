@@ -93,3 +93,52 @@ test("toolbar repeatedly switches improved and original diff with real parser", 
     await expect.poll(() => content.innerHTML()).toBe(original);
   }
 });
+
+// Original examples exercise behaviors documented by Difftastic, not its fixture contents.
+test("syntax matching preserves reflow, wrappers and significant edits across real grammars", async ({ page }) => {
+  await page.goto("/");
+  const cases = [
+    { path: "reflow.js", before: "const grove = [birch, cedar];\n", after: "const grove = [\n  birch,\n  cedar,\n];\n", retained: ["birch", "cedar"], changed: [","] },
+    { path: "reflow.ts", before: "const tags: string[] = [\"north\", \"south\"];\n", after: "const tags: string[] = [\n  \"north\",\n  \"south\",\n];\n", retained: ["north", "south"], changed: [","] },
+    { path: "reflow.tsx", before: "const card = <article id=\"map\" title=\"Trail\" />;\n", after: "const card = <article\n  id=\"map\"\n  title=\"Trail\"\n/>;\n", retained: ["map", "Trail"], changed: [] },
+    { path: "reflow.json", before: "{\"paths\": [\"east\", \"west\"]}\n", after: "{\n  \"paths\": [\n    \"east\",\n    \"west\"\n  ]\n}\n", retained: ["paths", "east", "west"], changed: [] },
+    { path: "scope.py", before: "if active:\n    render(scene)\n", after: "if active:\n    pass\nrender(scene)\n", retained: ["render", "scene"], changed: ["pass"] },
+    { path: "wrap.rs", before: "fn grow() { emit(seed); }\n", after: "fn grow() { if ready { emit(seed); } }\n", retained: ["emit", "seed"], changed: ["if", "ready"] },
+    { path: "wrap.go", before: "package grove\nfunc grow() { emit(seed) }\n", after: "package grove\nfunc grow() { if ready { emit(seed) } }\n", retained: ["emit", "seed"], changed: ["if", "ready"] },
+    { path: "value.css", before: ".grove { color: olive; padding: 2px; }\n", after: ".grove {\n  color: teal;\n  padding: 2px;\n}\n", retained: ["grove", "padding", "2"], changed: ["teal"] },
+    { path: "wrap.js", before: "function shade() { return leaf; }\n", after: "function shade() { return frame(leaf); }\n", retained: ["leaf"], changed: ["frame"] },
+    { path: "key.json", before: "{\"oldTrail\": 17}\n", after: "{\"newTrail\": 17}\n", retained: ["17"], changed: ["newTrail"] },
+    { path: "literal.py", before: "label = \"deep forest\"\n", after: "label = \"deep  forest\"\n", retained: ["label"], changed: ["deep  forest"] },
+  ];
+  for (const example of cases) {
+    const result = await page.evaluate(async example => {
+      const worker = new Worker("/src/client/syntaxMatch.worker.ts", { type: "module" });
+      try {
+        const data = await new Promise<{ result?: import("../src/client/syntaxMatcher").MatchResult }>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("Worker timed out")), 10000);
+          worker.onmessage = event => { clearTimeout(timer); resolve(event.data); };
+          worker.onerror = event => { clearTimeout(timer); reject(new Error(event.message)); };
+          worker.postMessage({ before: { revision: "old", path: example.path, text: example.before }, after: { revision: "new", path: example.path, text: example.after } });
+        });
+        if (!data.result) throw new Error("Parsing failed: " + example.path);
+        // @ts-expect-error Vite serves this module during the browser test.
+        const { createDiffEngine }: typeof import("../src/client/diffEngine") = await import("/src/client/diffEngine.ts");
+        const before = example.before.trimEnd().split("\n");
+        const after = example.after.trimEnd().split("\n");
+        const patch = [`@@ -1,${before.length} +1,${after.length} @@`, ...before.map(line => "-" + line), ...after.map(line => "+" + line)].join("\n");
+        const model = createDiffEngine(true, data.result)(patch);
+        const added = model.unified.filter(line => line.prefix === "+");
+        return {
+          retained: added.flatMap(line => line.segments ?? []).filter(segment => !segment.changed).map(segment => segment.text).join(""),
+          changed: added.flatMap(line => line.segments ?? []).filter(segment => segment.changed).map(segment => segment.text).join(""),
+          lossless: model.unified.every(line => !line.segments || line.segments.map(segment => segment.text).join("") === line.text),
+          removed: model.unified.filter(line => line.prefix === "-").flatMap(line => line.segments ?? []).filter(segment => segment.changed).map(segment => segment.text).join(""),
+        };
+      } finally { worker.terminate(); }
+    }, example);
+    expect(result.lossless, example.path).toBe(true);
+    for (const text of example.retained) expect(result.retained, example.path).toContain(text);
+    for (const text of example.changed) expect(result.changed, example.path).toContain(text);
+    if (example.path === "scope.py") expect(result.removed).toContain("    ");
+  }
+});
