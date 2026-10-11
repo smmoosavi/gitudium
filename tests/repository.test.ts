@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
-import type { WhitespaceMode } from "../src/repository/types";
+import type { GitDiffAlgorithm, WhitespaceMode } from "../src/repository/types";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -43,6 +43,22 @@ async function commit(path: string, name: string, content: string | Uint8Array, 
   await git(path, "commit", "-m", subject);
   return git(path, "rev-parse", "HEAD");
 }
+
+test("Git algorithms match Git output and reject unknown values", async () => {
+  const directory = await fixture();
+  await commit(directory, "sample.txt", "alpha\nbeta\nalpha\ngamma\n", "Before");
+  await commit(directory, "sample.txt", "gamma\nalpha\nbeta\nalpha\n", "After");
+  const reader = await GitRepositoryReader.discover(directory);
+  const algorithms: GitDiffAlgorithm[] = ["myers", "histogram", "patience", "minimal"];
+  for (const algorithm of algorithms) {
+    const actual = await reader.diff("HEAD", "sample.txt", undefined, "none", algorithm);
+    const expected = await git(directory, "diff", "--full-index", "--no-renames", `--diff-algorithm=${algorithm}`, "HEAD^", "HEAD", "--", "sample.txt");
+    expect(actual.state).toBe("text");
+    if (actual.state === "text") expect(actual.patch.trim()).toBe(expected);
+  }
+  expect(await reader.diff("HEAD")).toEqual(await reader.diff("HEAD", undefined, undefined, "none", "myers"));
+  await expect(reader.diff("HEAD", undefined, undefined, "none", "unknown" as GitDiffAlgorithm)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
 
 test("diff whitespace modes distinguish trailing, internal and blank-line changes", async () => {
   const directory = await fixture();

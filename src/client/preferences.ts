@@ -43,7 +43,18 @@ const diffAlgorithm: Preference<DiffAlgorithm> = {
   write: (storage, value) => storage.setItem(diffAlgorithmStorageKey, value),
 };
 
+export const gitAlgorithmStorageKey = "gitudium.git-diff-algorithm.v1";
+const gitAlgorithm: Preference<import("../repository/types").GitDiffAlgorithm> = {
+  defaultValue: () => "myers",
+  read: storage => {
+    const saved = storage.getItem(gitAlgorithmStorageKey);
+    return saved === "histogram" || saved === "patience" || saved === "minimal" ? saved : "myers";
+  },
+  write: (storage, value) => storage.setItem(gitAlgorithmStorageKey, value),
+};
+
 export const viewerPreferences = {
+  gitAlgorithm,
   diffAlgorithm,
   refExclusions,
   wrap: { defaultValue: () => false, read: readDiffWrap, write: writeDiffWrap },

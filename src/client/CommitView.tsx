@@ -19,6 +19,7 @@ import type { SyntaxService } from "./syntaxService";
 import { diffModeChange, pairedDiffEngine } from "./diffEngine";
 import { sameFileDiffPlaceholder } from "./diffQuery";
 import { useSyntaxMatcher } from "./useSyntaxMatcher";
+import { DiffOptions } from "./DiffOptions";
 
 export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesModeChange, wrap, onWrapChange, focusedPane, onPaneFocus, navigationRef, syntaxService }: {
   syntaxService: SyntaxService;
@@ -30,17 +31,16 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
 }) {
   const [selectedPath, setPath] = useState<string | null>(null);
   const [diffAlgorithm, setDiffAlgorithm] = usePreference(viewerPreferences.diffAlgorithm);
-  const algorithmLabels = { simple: "Simple", paired: "Pair lines", syntax: "Syntax-aware" };
-  const nextAlgorithm = diffAlgorithm === "simple" ? "paired" : diffAlgorithm === "paired" ? "syntax" : "simple";
+  const [gitAlgorithm, setGitAlgorithm] = usePreference(viewerPreferences.gitAlgorithm);
   const [whitespace, setWhitespace] = usePreference(viewerPreferences.whitespace);
   const filtered = whitespace !== "none";
   const commit = useQuery({ queryKey: ["commit", id], staleTime: Infinity, queryFn: ({ signal }) => api.commit.query({ revision: id }, { signal }), retry: false });
   const paths = filePaths(commit.data?.files ?? [], filesMode);
   const path = selectedPath ?? paths[0] ?? null;
   const diff = useQuery<Awaited<ReturnType<typeof api.diff.query>> & { whitespace: WhitespaceMode }>({
-    queryKey: ["diff", id, path, whitespace], enabled: path !== null, staleTime: Infinity,
+    queryKey: ["diff", id, path, whitespace, gitAlgorithm], enabled: path !== null, staleTime: Infinity,
     placeholderData: (previousData, previousQuery) => sameFileDiffPlaceholder(previousData, previousQuery, id, path),
-    queryFn: async ({ signal }) => ({ ...await api.diff.query({ revision: id, path: path!, whitespace }, { signal }), whitespace }), retry: false,
+    queryFn: async ({ signal }) => ({ ...await api.diff.query({ revision: id, path: path!, whitespace, algorithm: gitAlgorithm }, { signal }), whitespace }), retry: false,
   });
   const displayedFiltered = diff.data ? diff.data.whitespace !== "none" : filtered;
   const [stableSourceKey, setStableSourceKey] = useState<string | null>(null);
@@ -123,7 +123,7 @@ export function CommitView({ id, diffMode, onDiffModeChange, filesMode, onFilesM
     <ChangedFiles files={details.files} mode={filesMode} selected={path} onSelect={setPath} />
     </section>
     <section className={`diff-panel${focusedPane === "diff" ? " pane-focused" : ""}`} aria-label="File diff" onPointerDown={() => { if (path !== null) onPaneFocus("diff"); }} onFocusCapture={() => { if (path !== null) onPaneFocus("diff"); }}>
-    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{selectedFile?.previousPath ? `${selectedFile.previousPath} → ${path}` : path}</code></>}{selectedFile && <><span className="diff-file-detail">{selectedFile.status}</span><FileChangeSummary file={selectedFile} /></>}{modeChange && <span className="diff-file-detail">{modeChange}</span>}</h3><div className="diff-controls"><button type="button" className="diff-algorithm" aria-label={`Diff algorithm: ${algorithmLabels[diffAlgorithm]}`} data-algorithm={diffAlgorithm} disabled={path === null || diff.data?.state !== "text"} title={`${syntaxMatcher.pending ? "Computing syntax-aware diff. " : syntaxMatcher.unavailable ? "Syntax-aware matching unavailable for this file. Showing simple diff. " : ""}Click to switch to ${algorithmLabels[nextAlgorithm]}.`} onClick={() => setDiffAlgorithm(nextAlgorithm)}><span className="diff-algorithm-label">Diff</span><span className="diff-algorithm-value">{algorithmLabels[diffAlgorithm]}</span></button>{<button type="button" className="full-file-toggle" disabled={path === null || contextUnavailable || (textSources !== undefined && !fullAllowed) || (diff.data !== undefined && diff.data.state !== "text")} title={textSources && !fullAllowed ? "Full-file view exceeds the 20,000 line rendering limit; expand context in smaller sections." : undefined} aria-pressed={context.full} onClick={() => { setStableSourceKey(sourceKey); setContextView({ ...context, full: !context.full }); }}>{context.full ? "Hunks only" : "Full file"}</button>}<button type="button" className="whitespace-toggle" aria-label="Ignore whitespace changes" title="Ignore whitespace changes" aria-pressed={filtered} onClick={() => setWhitespace(filtered ? "none" : "all")}>w</button><button type="button" className="wrap-toggle" aria-label="Wrap diff lines" title="Wrap diff lines" aria-pressed={wrap} onClick={() => onWrapChange(!wrap)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M3 10h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 14h5M3 18h5" /></svg></button><ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /></div></div>
+    <div className="panel-heading diff-heading"><h3>File diff{path !== null && <> · <code>{selectedFile?.previousPath ? `${selectedFile.previousPath} → ${path}` : path}</code></>}{selectedFile && <><span className="diff-file-detail">{selectedFile.status}</span><FileChangeSummary file={selectedFile} /></>}{modeChange && <span className="diff-file-detail">{modeChange}</span>}</h3><div className="diff-controls">{<button type="button" className="full-file-toggle" disabled={path === null || contextUnavailable || (textSources !== undefined && !fullAllowed) || (diff.data !== undefined && diff.data.state !== "text")} title={textSources && !fullAllowed ? "Full-file view exceeds the 20,000 line rendering limit; expand context in smaller sections." : undefined} aria-pressed={context.full} onClick={() => { setStableSourceKey(sourceKey); setContextView({ ...context, full: !context.full }); }}>{context.full ? "Hunks only" : "Full file"}</button>}<button type="button" className="wrap-toggle" aria-label="Wrap diff lines" title="Wrap diff lines" aria-pressed={wrap} onClick={() => onWrapChange(!wrap)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M3 10h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 14h5M3 18h5" /></svg></button><ViewToggle label="Diff view" value={diffMode} options={diffOptions} onChange={onDiffModeChange} /><DiffOptions alignment={diffAlgorithm} algorithm={gitAlgorithm} whitespace={whitespace} onAlignmentChange={setDiffAlgorithm} onAlgorithmChange={setGitAlgorithm} onWhitespaceChange={setWhitespace} busy={diff.isFetching || syntaxMatcher.pending} status={syntaxMatcher.pending ? "Computing syntax-aware diff…" : syntaxMatcher.unavailable ? "Using Simple for this file: syntax-aware matching unavailable." : diff.isFetching ? "Updating diff…" : undefined} /></div></div>
     <div ref={diffRef} className="diff-content" tabIndex={0} role="region" aria-label="Diff content" aria-busy={diff.isFetching}>
     {path === null ? <p>Select a changed file to load its diff.</p>
       : diff.isPending ? null

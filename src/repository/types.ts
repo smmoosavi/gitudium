@@ -72,6 +72,8 @@ export interface CommitDetails extends CommitSummary {
   diffBase: string | null;
 }
 
+export type GitDiffAlgorithm = "myers" | "histogram" | "patience" | "minimal";
+
 export type WhitespaceMode = "none" | "trailing" | "all" | "all-and-blank-lines";
 
 export type DiffResult =
@@ -97,6 +99,6 @@ export interface RepositoryReader {
   references(signal?: AbortSignal): Promise<Reference[]>;
   history(query?: HistoryQuery, signal?: AbortSignal): Promise<HistoryPage>;
   commit(revision: string, signal?: AbortSignal): Promise<CommitDetails>;
-  diff(revision: string, path?: string, signal?: AbortSignal, whitespace?: WhitespaceMode): Promise<DiffResult>;
+  diff(revision: string, path?: string, signal?: AbortSignal, whitespace?: WhitespaceMode, algorithm?: GitDiffAlgorithm): Promise<DiffResult>;
   sources(revision: string, path: string, signal?: AbortSignal): Promise<SourceResult>;
 }
