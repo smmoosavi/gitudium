@@ -142,29 +142,36 @@ test("live invalidation refreshes history without replacing older details or ste
 
 test("view preferences persist across commit switches and reloads", async ({ page, repository }) => {
   await page.locator('[data-commit-index="0"]').click();
-  const pairing = page.getByRole("button", { name: /^Diff algorithm:/ });
-  const whitespace = page.getByRole("button", { name: "Ignore whitespace changes", exact: true });
+  const options = page.getByRole("button", { name: "Diff options", exact: true });
   const wrap = page.getByRole("button", { name: "Wrap diff lines", exact: true });
-  await pairing.click();
-  await whitespace.click();
+  await options.click();
+  await page.getByRole("radio", { name: /^Similarity/ }).check();
+  await page.getByRole("radio", { name: /^Histogram/ }).check();
+  await page.getByRole("radio", { name: "Ignore", exact: true }).check();
+  await page.keyboard.press("Escape");
+  await expect(options).toBeFocused();
   await wrap.click();
   await expect.poll(() => page.evaluate(() => ({
     pair: localStorage.getItem("gitudium.diff-algorithm.v1"),
+    algorithm: localStorage.getItem("gitudium.git-diff-algorithm.v1"),
     whitespace: localStorage.getItem("gitudium.diff-whitespace.v1"),
     wrap: localStorage.getItem("gitudium.diff-wrap.v1"),
-  }))).toEqual({ pair: "paired", whitespace: "all", wrap: "true" });
+  }))).toEqual({ pair: "paired", algorithm: "histogram", whitespace: "all", wrap: "true" });
   await page.locator('[data-commit-index="1"]').click();
   await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 1");
-  await expect(pairing).toHaveAttribute("data-algorithm", "paired");
-  for (const button of [whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(options).toHaveAttribute("title", /Histogram · Similarity · Ignore whitespace/);
   await page.reload();
   await page.locator('[data-commit-index="0"]').click();
-  await expect(pairing).toHaveAttribute("data-algorithm", "paired");
-  for (const button of [whitespace, wrap]) await expect(button).toHaveAttribute("aria-pressed", "true");
-  await pairing.click();
-  await expect(pairing).toHaveAttribute("data-algorithm", "syntax");
-  await pairing.click();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("gitudium.diff-algorithm.v1"))).toBe("simple");
+  await expect(options).toHaveAttribute("title", /Histogram · Similarity · Ignore whitespace/);
+  await expect(wrap).toHaveAttribute("aria-pressed", "true");
+  await options.click();
+  await expect(page.getByRole("radio", { name: /^Histogram/ })).toBeChecked();
+  await page.getByRole("button", { name: "Reset to defaults" }).click();
+  await expect(page.getByRole("radio", { name: /^Simple/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: /^Myers/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: "Include", exact: true })).toBeChecked();
+  await page.locator(".commit-summary h3").click();
+  await expect(page.getByRole("dialog", { name: "Diff options" })).not.toBeVisible();
 });
 
 test("log exclusion settings save, reload, and combine with the reference selector", async ({ page, repository }) => {

@@ -4,7 +4,7 @@ import { useViewerPreferences } from "../src/client/useViewerPreferences";
 import { defaultLayout, layoutStorageKey } from "../src/client/layout";
 import { diffStorageKey, wrapStorageKey, pairingStorageKey, whitespaceStorageKey } from "../src/client/diff";
 import { filesStorageKey } from "../src/client/files";
-import { diffAlgorithmStorageKey, readPreference, writePreference, viewerPreferences, type Preference } from "../src/client/preferences";
+import { gitAlgorithmStorageKey, diffAlgorithmStorageKey, readPreference, writePreference, viewerPreferences, type Preference } from "../src/client/preferences";
 import { usePreference } from "../src/client/usePreference";
 
 function Preferences() {
@@ -110,4 +110,18 @@ test("saved ref exclusions validate storage and preserve comma-separated setting
     expect(readPreference(viewerPreferences.refExclusions, storage(value))).toBe("");
   }
   expect(readPreference(viewerPreferences.refExclusions, () => { throw new Error("blocked"); })).toBe("");
+});
+
+test("Git algorithm preference persists independently and safely defaults", () => {
+  const values = new Map<string, string>();
+  const storage = () => ({ getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } });
+  expect(readPreference(viewerPreferences.gitAlgorithm, storage)).toBe("myers");
+  for (const algorithm of ["myers", "histogram", "patience", "minimal"] as const) {
+    writePreference(viewerPreferences.gitAlgorithm, algorithm, storage);
+    expect(readPreference(viewerPreferences.gitAlgorithm, storage)).toBe(algorithm);
+    expect(readPreference(viewerPreferences.diffAlgorithm, storage)).toBe("simple");
+  }
+  values.set(gitAlgorithmStorageKey, "invalid");
+  expect(readPreference(viewerPreferences.gitAlgorithm, storage)).toBe("myers");
+  expect(readPreference(viewerPreferences.gitAlgorithm, () => { throw new Error("blocked"); })).toBe("myers");
 });

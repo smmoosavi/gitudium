@@ -43,8 +43,9 @@ export const appRouter = t.router({
   diff: repositoryProcedure.input(z.object({
     revision,
     path: path.optional(),
+    algorithm: z.enum(["myers", "histogram", "patience", "minimal"]).default("myers"),
     whitespace: z.enum(["none", "trailing", "all", "all-and-blank-lines"]).default("none"),
-  })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal, input.whitespace))),
+  })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal, input.whitespace, input.algorithm))),
   sources: repositoryProcedure.input(z.object({ revision, path })).query(({ ctx, input, signal }) => read(() => ctx.reader.sources(input.revision, input.path, signal))),
   health: t.procedure
     .input(z.object({ name: z.string().trim().min(1).max(80) }))

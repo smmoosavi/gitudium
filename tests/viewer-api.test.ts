@@ -63,6 +63,9 @@ test("repository queries navigate empty history, references, pages, details and 
   expect(details.files.map(file => file.path)).toEqual([path]);
   expect(details.diffBase).toBe(root);
   expect(await api.diff.query({ revision: head, path })).toMatchObject({ state: "text", patch: expect.stringContaining("+second") });
+  for (const algorithm of ["myers", "histogram", "patience", "minimal"] as const) {
+    expect(await api.diff.query({ revision: head, path, algorithm })).toMatchObject({ state: "text", patch: expect.stringContaining("+second") });
+  }
   expect(await api.diff.query({ revision: root, path: "binary" })).toEqual({ state: "binary" });
   expect(await api.diff.query({ revision: root, path: "large" })).toMatchObject({ state: "oversized" });
   expect(await api.sources.query({ revision: head, path })).toEqual({ state: "text",
@@ -77,6 +80,7 @@ test("repository API validates limits, revisions, paths and cursors", async () =
   expect((await api.history.query({ limit: HISTORY_CHUNK_SIZE })).commits).toHaveLength(2);
   for (const limit of [0, HISTORY_CHUNK_SIZE + 1, 1.5]) await expect(api.history.query({ limit })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.commit.query({ revision: "--all" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+  await expect(api.diff.query({ revision: "HEAD", algorithm: "unknown" as "myers" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.diff.query({ revision: "HEAD", path: "../outside" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.history.query({ cursor: { snapshot: "--all", offset: -1 } })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
 });
