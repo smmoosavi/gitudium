@@ -5,7 +5,9 @@ import { applyDiffSyntax } from "./diffSyntax";
 import { buildDiffModel, type DiffEngine, type DiffSegment } from "./diffModel";
 
 function inlineText(text: string, segments?: DiffSegment[]) {
-  return segments ? segments.map((segment, index) => segment.changed
+  const meaningful = /[\p{L}\p{N}_]/u.test(text) ? /[\p{L}\p{N}_]/u : /\S/;
+  const hasUnchangedContent = segments?.some(segment => !segment.changed && meaningful.test(segment.text));
+  return segments ? segments.map((segment, index) => segment.changed && hasUnchangedContent
     ? <mark className="word-change" style={segment.color ? { color: segment.color } : undefined} key={index}>{segment.text}</mark>
     : segment.color ? <span className="syntax-token" style={{ color: segment.color }} key={index}>{segment.text}</span> : segment.text) : text || " ";
 }

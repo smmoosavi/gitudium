@@ -107,6 +107,7 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
     { path: "wrap.go", before: "package grove\nfunc grow() { emit(seed) }\n", after: "package grove\nfunc grow() { if ready { emit(seed) } }\n", retained: ["emit", "seed"], changed: ["if", "ready"] },
     { path: "value.css", before: ".grove { color: olive; padding: 2px; }\n", after: ".grove {\n  color: teal;\n  padding: 2px;\n}\n", retained: ["grove", "padding", "2"], changed: ["teal"] },
     { path: "wrap.js", before: "function shade() { return leaf; }\n", after: "function shade() { return frame(leaf); }\n", retained: ["leaf"], changed: ["frame"] },
+    { path: "branch.ts", before: 'const visit = (node: Parser.SyntaxNode) => {\n  if (node.childCount) {\n    visit(child);\n  }\n};\n', after: 'const visit = (node: Parser.SyntaxNode, path: string[] = []) => {\n  if (node.type === "string") {\n    append(node.text);\n  } else if (node.childCount) {\n    visit(child, path);\n  }\n};\n', retained: ['node.childCount', 'visit(child'], changed: ['else', 'path'] },
     { path: "key.json", before: "{\"oldTrail\": 17}\n", after: "{\"newTrail\": 17}\n", retained: ["17"], changed: ['"newTrail"'] },
     { path: "dependencies.json", before: '{\n  "removed-tool": "^1",\n  "retained-tool": "^7",\n  "test-helper": "^10"\n}\n', after: '{\n  "retained-tool": "^7.2",\n  "test-helper": "^11"\n}\n', retained: ['"retained-tool"', '"test-helper"'], changed: ['"^7.2"', '"^11"'] },
     { path: "removed-object.json", before: '{\n  "peerDependencies": {\n    "react": "^18"\n  },\n  "pnpm": {\n    "overrides": {\n      "parser": "^6",\n      "plugin": "^6"\n    }\n  }\n}\n', after: '{\n  "peerDependencies": {\n    "react": "^18 || ^19"\n  }\n}\n', retained: ['"react"'], changed: ['"^18 || ^19"'] },
@@ -152,6 +153,8 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
         });
         return {
           atomicStrings,
+          branchRetained: added.filter(line => line.text.includes("else if (node.childCount)")).flatMap(line => line.segments ?? []).filter(segment => !segment.changed).map(segment => segment.text).join(""),
+          branchChanged: added.filter(line => line.text.includes("else if (node.childCount)")).flatMap(line => line.segments ?? []).filter(segment => segment.changed).map(segment => segment.text).join(""),
           closingAligned: model.split.some(row => "left" in row && row.left?.text === "  }," && row.right?.text === "  }"),
           closingHighlights: model.unified.filter(line => line.prefix === "+" && line.text === "  }").flatMap(line => line.segments ?? []).filter(segment => segment.changed).map(segment => segment.text).join(""),
           deletedScopes: model.unified.filter(line => line.prefix === "-").flatMap(line => {
@@ -170,6 +173,11 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
     for (const text of example.retained) expect(result.retained, example.path).toContain(text);
     for (const text of example.changed) expect(result.changed, example.path).toContain(text);
     if (example.path === "scope.py") expect(result.removed).toContain("    ");
+    if (example.path === "branch.ts") {
+      expect(result.branchRetained).toContain("if (node.childCount)");
+      expect(result.branchChanged).toContain("else");
+      expect(result.branchChanged).not.toContain("node");
+    }
     if (example.path === "removed-object.json") {
       expect(result.closingAligned).toBe(true);
       expect(result.closingHighlights).toBe("");
