@@ -91,8 +91,31 @@ export function createSyntaxMatcher() {
       return pairs;
     },
     highlightBlock(left: MatchLines, right: MatchLines): { before: DiffSegment[][]; after: DiffSegment[][] } | undefined {
-      const result = this.highlight(left.flat(), right.flat());
-      if (!result) return;
+      const pairs = this.align(left.map(line => line.map(token => token.text).join("")), right.map(line => line.map(token => token.text).join("")), left, right, () => []);
+      const anchors = pairs.filter(pair => {
+        if (pair.before === undefined || pair.after === undefined) return false;
+        const before = meaningful(left[pair.before]!);
+        const after = meaningful(right[pair.after]!);
+        const weight = Math.min(...[before, after].map(tokens => tokens.reduce((sum, token) => sum + tokenWeight(token), 0)));
+        return weight >= 4 && common(before, after, true) / weight >= 0.8;
+      });
+      const result: InlineChange = { before: [], after: [] };
+      let old = 0;
+      let next = 0;
+      for (const anchor of [...anchors, { before: left.length, after: right.length }]) {
+        const gap = this.highlight(left.slice(old, anchor.before).flat(), right.slice(next, anchor.after).flat());
+        if (!gap) return;
+        result.before.push(...gap.before);
+        result.after.push(...gap.after);
+        if (anchor.before! < left.length && anchor.after! < right.length) {
+          const pair = this.highlight(left[anchor.before!]!, right[anchor.after!]!);
+          if (!pair) return;
+          result.before.push(...pair.before);
+          result.after.push(...pair.after);
+        }
+        old = anchor.before! + 1;
+        next = anchor.after! + 1;
+      }
       const distribute = (lines: MatchLines, other: MatchLines, segments: DiffSegment[]) => {
         let index = 0;
         let offset = 0;

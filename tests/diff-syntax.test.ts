@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildDiffModel } from "../src/client/diffModel";
+import { buildDiffModel, type DiffEngine } from "../src/client/diffModel";
 import { expandDiffContext } from "../src/client/diffContext";
 import { applyDiffSyntax, syntaxSegments } from "../src/client/diffSyntax";
 import { DiffPatch } from "../src/client/DiffPatch";
@@ -39,6 +39,17 @@ test("excessive rendered token volume falls back to the existing model", () => {
   const base = buildDiffModel(`@@ -1 +1 @@\n-${text}\n+${text}\n`);
   const tokens = Array.from(text, text => ({ text, color: "#ffffff" }));
   expect(applyDiffSyntax(base, { before: [tokens], after: [tokens] })).toBe(base);
+});
+
+test("whole-line syntax changes use line backgrounds without redundant word marks", () => {
+  for (const mode of ["unified", "split"] as const) {
+    const html = renderToStaticMarkup(createElement(DiffPatch, {
+      patch: "@@ -1 +1 @@\n-old\n+new", mode,
+      engine: (() => ({ unified: [{ text: "new", prefix: "+", kind: "addition", segments: [{ text: "new", changed: true }] }], split: [{ right: { text: "new", number: 1, kind: "addition", segments: [{ text: "new", changed: true }] } }] })) as DiffEngine,
+    }));
+    expect(html).not.toContain('class="word-change"');
+    expect(html).toContain("new");
+  }
 });
 
 test("both modes safely render inline syntax alongside word marks", () => {
