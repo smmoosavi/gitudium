@@ -107,7 +107,11 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
     { path: "wrap.go", before: "package grove\nfunc grow() { emit(seed) }\n", after: "package grove\nfunc grow() { if ready { emit(seed) } }\n", retained: ["emit", "seed"], changed: ["if", "ready"] },
     { path: "value.css", before: ".grove { color: olive; padding: 2px; }\n", after: ".grove {\n  color: teal;\n  padding: 2px;\n}\n", retained: ["grove", "padding", "2"], changed: ["teal"] },
     { path: "wrap.js", before: "function shade() { return leaf; }\n", after: "function shade() { return frame(leaf); }\n", retained: ["leaf"], changed: ["frame"] },
-    { path: "key.json", before: "{\"oldTrail\": 17}\n", after: "{\"newTrail\": 17}\n", retained: ["17"], changed: ["newTrail"] },
+    { path: "key.json", before: "{\"oldTrail\": 17}\n", after: "{\"newTrail\": 17}\n", retained: ["17"], changed: ['"newTrail"'] },
+    { path: "dependencies.json", before: '{\n  "removed-tool": "^1",\n  "retained-tool": "^7",\n  "test-helper": "^10"\n}\n', after: '{\n  "retained-tool": "^7.2",\n  "test-helper": "^11"\n}\n', retained: ['"retained-tool"', '"test-helper"'], changed: ['"^7.2"', '"^11"'] },
+    { path: "removed-object.json", before: '{\n  "peerDependencies": {\n    "react": "^18"\n  },\n  "pnpm": {\n    "overrides": {\n      "parser": "^6",\n      "plugin": "^6"\n    }\n  }\n}\n', after: '{\n  "peerDependencies": {\n    "react": "^18 || ^19"\n  }\n}\n', retained: ['"react"'], changed: ['"^18 || ^19"'] },
+    { path: "roles.json", before: '{"trail": "forest"}\n', after: '{"forest": "trail"}\n', retained: [], changed: ['"forest"', '"trail"'] },
+    { path: "escaped.json", before: '{"label": "old\\\" name"}\n', after: '{"label": "new\\\" name"}\n', retained: ['"label"'], changed: ['"new\\\" name"'] },
     { path: "literal.py", before: "label = \"deep forest\"\n", after: "label = \"deep  forest\"\n", retained: ["label"], changed: ["deep  forest"] },
   ];
   for (const example of cases) {
@@ -125,10 +129,35 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
         const { createDiffEngine }: typeof import("../src/client/diffEngine") = await import("/src/client/diffEngine.ts");
         const before = example.before.trimEnd().split("\n");
         const after = example.after.trimEnd().split("\n");
-        const patch = [`@@ -1,${before.length} +1,${after.length} @@`, ...before.map(line => "-" + line), ...after.map(line => "+" + line)].join("\n");
+        const patch = example.path === "removed-object.json"
+          ? ['@@ -1,11 +1,5 @@', ' {', '   "peerDependencies": {', '-    "react": "^18"', '-  },', '-  "pnpm": {', '-    "overrides": {', '-      "parser": "^6",', '-      "plugin": "^6"', '-    }', '+    "react": "^18 || ^19"', '   }', ' }'].join("\n")
+          : [`@@ -1,${before.length} +1,${after.length} @@`, ...before.map(line => "-" + line), ...after.map(line => "+" + line)].join("\n");
         const model = createDiffEngine(true, data.result)(patch);
         const added = model.unified.filter(line => line.prefix === "+");
+        const atomicStrings = model.unified.every(line => {
+          const tokens = line.prefix === "+" ? data.result!.after?.[line.newNumber! - 1] : line.prefix === "-" ? data.result!.before?.[line.oldNumber! - 1] : undefined;
+          let offset = 0;
+          return (tokens ?? []).every(token => {
+            const start = offset;
+            offset += token.text.length;
+            if (!token.type.startsWith("json/")) return true;
+            let position = 0;
+            const states = new Set<boolean>();
+            for (const segment of line.segments ?? []) {
+              if (position < offset && position + segment.text.length > start) states.add(segment.changed);
+              position += segment.text.length;
+            }
+            return states.size === 1;
+          });
+        });
         return {
+          atomicStrings,
+          closingAligned: model.split.some(row => "left" in row && row.left?.text === "  }," && row.right?.text === "  }"),
+          closingHighlights: model.unified.filter(line => line.prefix === "+" && line.text === "  }").flatMap(line => line.segments ?? []).filter(segment => segment.changed).map(segment => segment.text).join(""),
+          deletedScopes: model.unified.filter(line => line.prefix === "-").flatMap(line => {
+            const tokens = data.result!.before?.[line.oldNumber! - 1] ?? [];
+            return tokens.some(token => token.scope?.includes('"pnpm"')) ? [{ text: line.text, segments: line.segments }] : [];
+          }),
           retained: added.flatMap(line => line.segments ?? []).filter(segment => !segment.changed).map(segment => segment.text).join(""),
           changed: added.flatMap(line => line.segments ?? []).filter(segment => segment.changed).map(segment => segment.text).join(""),
           lossless: model.unified.every(line => !line.segments || line.segments.map(segment => segment.text).join("") === line.text),
@@ -137,8 +166,17 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
       } finally { worker.terminate(); }
     }, example);
     expect(result.lossless, example.path).toBe(true);
+    expect(result.atomicStrings, example.path).toBe(true);
     for (const text of example.retained) expect(result.retained, example.path).toContain(text);
     for (const text of example.changed) expect(result.changed, example.path).toContain(text);
     if (example.path === "scope.py") expect(result.removed).toContain("    ");
+    if (example.path === "removed-object.json") {
+      expect(result.closingAligned).toBe(true);
+      expect(result.closingHighlights).toBe("");
+      expect(result.deletedScopes.length).toBe(6);
+      for (const line of result.deletedScopes) {
+        expect(line.segments?.filter(segment => !segment.changed).map(segment => segment.text).join("").trim(), line.text).toBe("");
+      }
+    }
   }
 });
