@@ -61,6 +61,31 @@ test("engine shares block-wide highlights across split and unified views", () =>
   }
 });
 
+test("JSON delimiters and values cannot match across object paths", () => {
+  const closing = (scope: string) => ({ text: "}", type: "object/}", scope });
+  const matcher = createSyntaxMatcher();
+  expect(matcher.align(["}", "}"], ["}"], [[closing('["pnpm","overrides"]')], [closing('["peerDependencies"]')]], [[closing('["peerDependencies"]')]], () => [])).toEqual([{ before: 0 }, { before: 1, after: 0 }]);
+  expect(createSyntaxMatcher().highlight([closing('["pnpm"]')], [closing('["peerDependencies"]')])).toEqual({ before: [{ text: "}", changed: true }], after: [{ text: "}", changed: true }] });
+});
+
+test("JSON block matching keeps unchanged indentation outside word highlights", () => {
+  const scoped = (text: string, scope = '["devDependencies"]'): MatchToken => ({ text, type: "json/json_key", scope });
+  const left = [
+    [token("  ", ""), scoped('"removed"')],
+    [token("  ", ""), scoped('"@microsoft/api-extractor"'), token(":", "pair/:"), token('"^7"', "json/json_value")],
+    [token("  ", ""), { text: "}", type: "object/}", scope: '["peerDependencies"]' }, token(",", "object/,")],
+  ];
+  const right = [left[1]!.slice(0, 3).concat(token('"^7.59.2"', "json/json_value")), left[2]!.slice(0, 2)];
+  const result = createSyntaxMatcher().highlightBlock(left, right)!;
+  expect(result.before[0]).toEqual([{ text: '  "removed"', changed: true }]);
+  expect(result.before[1]?.[0]).toEqual({ text: '  "@microsoft/api-extractor":', changed: false });
+  expect(result.after[0]?.[0]).toEqual({ text: '  "@microsoft/api-extractor":', changed: false });
+  expect(result.before[2]).toEqual([{ text: "  }", changed: false }, { text: ",", changed: true }]);
+  expect(result.after[1]).toEqual([{ text: "  }", changed: false }]);
+  const reindented = createSyntaxMatcher().highlightBlock([left[2]!], [[token("    ", ""), left[2]![1]!]])!;
+  expect(reindented.after[0]?.[0]).toEqual({ text: "    ", changed: true });
+});
+
 test("block matching remains bounded and safely handles empty lines", () => {
   expect(createSyntaxMatcher().highlightBlock([[]], [[]])).toEqual({ before: [[]], after: [[]] });
   expect(createSyntaxMatcher().highlightBlock(Array.from({ length: 513 }, () => [token("x")]), [[token("x")]])).toBeUndefined();

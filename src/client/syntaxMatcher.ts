@@ -2,7 +2,7 @@ import type { DiffSegment } from "./diffModel";
 import type { LinePair } from "./lineAlignment";
 import type { InlineChange } from "./wordDiff";
 
-export type MatchToken = { text: string; type: string };
+export type MatchToken = { text: string; type: string; scope?: string };
 export type MatchLines = MatchToken[][];
 export type MatchResult = { before: MatchLines | null; after: MatchLines | null };
 
@@ -17,11 +17,12 @@ function leafType(token: MatchToken): string { return token.type.split("/").at(-
 
 function tokenWeight(token: MatchToken): number {
   if (!token.type) return 0;
+  if (token.type === "json/json_key" || token.type === "json/json_value") return 2;
   return /^[\p{L}\p{N}_]/u.test(token.text) ? 2 : 0.5;
 }
 
 function matchWeight(left: MatchToken, right: MatchToken, exact: boolean): number {
-  if (!left.type || !right.type || (exact && left.text !== right.text)) return 0;
+  if (left.scope !== right.scope || !left.type || !right.type || (exact && left.text !== right.text)) return 0;
   if (left.type === right.type) return Math.min(tokenWeight(left), tokenWeight(right));
   // Wrapping an expression changes its parent, but not the identity of its leaves.
   return exact && left.type.includes("/") && right.type.includes("/") && leafType(left) === leafType(right)
@@ -65,7 +66,14 @@ export function createSyntaxMatcher() {
       for (let i = before.length - 1; i >= 0; i--) {
         for (let j = after.length - 1; j >= 0; j--) {
           const size = Math.max(a[i]!.reduce((sum, token) => sum + tokenWeight(token), 0), b[j]!.reduce((sum, token) => sum + tokenWeight(token), 0), 1);
-          const similarity = before[i]!.trim() === after[j]!.trim() ? 1
+          const sameScopes = JSON.stringify(a[i]!.map(token => token.scope)) === JSON.stringify(b[j]!.map(token => token.scope));
+          const closing = (tokens: MatchToken[]) => tokens.filter(token => token.text !== ",");
+          const oldClosing = closing(a[i]!);
+          const newClosing = closing(b[j]!);
+          const sameClosing = oldClosing.length === 1 && newClosing.length === 1
+            && oldClosing[0]!.scope !== undefined && /^[}\]]$/.test(oldClosing[0]!.text)
+            && matchWeight(oldClosing[0]!, newClosing[0]!, true) > 0;
+          const similarity = sameScopes && before[i]!.trim() === after[j]!.trim() ? 1 : sameClosing ? 0.9
             : (0.6 * common(a[i]!, b[j]!, false) + 0.4 * common(a[i]!, b[j]!, true)) / size;
           if (similarity >= 0.6) similarities[i * after.length + j] = similarity;
           scores[i * width + j] = Math.max(scores[(i + 1) * width + j]!, scores[i * width + j + 1]!, similarity >= 0.6 ? similarity + scores[(i + 1) * width + j + 1]! : 0);
@@ -85,7 +93,7 @@ export function createSyntaxMatcher() {
     highlightBlock(left: MatchLines, right: MatchLines): { before: DiffSegment[][]; after: DiffSegment[][] } | undefined {
       const result = this.highlight(left.flat(), right.flat());
       if (!result) return;
-      const distribute = (lines: MatchLines, segments: DiffSegment[]) => {
+      const distribute = (lines: MatchLines, other: MatchLines, segments: DiffSegment[]) => {
         let index = 0;
         let offset = 0;
         return lines.map(line => {
@@ -99,10 +107,28 @@ export function createSyntaxMatcher() {
             offset += length;
             if (offset === segment.text.length) { index++; offset = 0; }
           }
+          const first = line.findIndex(token => !!token.type);
+          const leading = line.slice(0, first).map(token => token.text).join("");
+          const anchor = line[first];
+          if (anchor?.scope !== undefined && /^[ \t]+$/.test(leading) && other.some(candidate => {
+            const index = candidate.findIndex(token => !!token.type);
+            return index >= 0 && candidate.slice(0, index).map(token => token.text).join("") === leading
+              && matchWeight(anchor, candidate[index]!, true) > 0;
+          })) {
+            const normalized: DiffSegment[] = [];
+            let position = 0;
+            for (const segment of output) {
+              const prefix = Math.min(segment.text.length, Math.max(0, leading.length - position));
+              if (prefix) append(normalized, segment.text.slice(0, prefix), false);
+              if (prefix < segment.text.length) append(normalized, segment.text.slice(prefix), segment.changed);
+              position += segment.text.length;
+            }
+            return normalized;
+          }
           return output;
         });
       };
-      return { before: distribute(left, result.before), after: distribute(right, result.after) };
+      return { before: distribute(left, right, result.before), after: distribute(right, left, result.after) };
     },
     highlight(left: MatchToken[], right: MatchToken[]): InlineChange | undefined {
       const cells = (left.length + 1) * (right.length + 1);

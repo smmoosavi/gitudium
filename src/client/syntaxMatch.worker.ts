@@ -39,23 +39,37 @@ async function tokenize(source: SyntaxSources["before"]): Promise<MatchLines | n
     let position = 0;
     let row = 0;
     let tokens = 0;
-    const append = (text: string, type: string) => {
+    const append = (text: string, type: string, scope?: string) => {
       const parts = text.split("\n");
       for (let i = 0; i < parts.length; i++) {
         if (i) row++;
         if (parts[i]) {
           if (++tokens > 100_000) throw new Error("Syntax token limit exceeded");
-          lines[row]!.push({ text: parts[i]!, type });
+          lines[row]!.push({ text: parts[i]!, type, ...(scope !== undefined ? { scope } : {}) });
         }
       }
     };
-    const visit = (node: Parser.SyntaxNode) => {
-      if (node.childCount) {
-        for (const child of node.children) visit(child);
+    const visit = (node: Parser.SyntaxNode, parentScope: string[] = []) => {
+      let path = parentScope;
+      if (url === jsonUrl && node.type === "pair") {
+        const key = node.childForFieldName("key");
+        const value = node.childForFieldName("value");
+        if (key && (value?.type === "object" || value?.type === "array")) path = [...parentScope, JSON.parse(source.text.slice(key.startIndex, key.endIndex)) as string];
+      }
+      const scope = url === jsonUrl ? JSON.stringify(path) : undefined;
+      if (url === jsonUrl && node.type === "string") {
+        append(source.text.slice(position, node.startIndex), "");
+        // Keep quotes attached to their string, and keys distinct from values.
+        const key = node.parent?.childForFieldName("key");
+        const role = key?.startIndex === node.startIndex ? "json_key" : "json_value";
+        append(source.text.slice(node.startIndex, node.endIndex), `json/${role}`, scope);
+        position = node.endIndex;
+      } else if (node.childCount) {
+        for (const child of node.children) visit(child, path);
       } else if (node.endIndex > node.startIndex) {
         append(source.text.slice(position, node.startIndex), "");
         // Parent kinds distinguish equal text used in different syntactic roles.
-        append(source.text.slice(node.startIndex, node.endIndex), `${node.parent?.type ?? ""}/${node.type}`);
+        append(source.text.slice(node.startIndex, node.endIndex), `${node.parent?.type ?? ""}/${node.type}`, scope);
         position = node.endIndex;
       }
     };
