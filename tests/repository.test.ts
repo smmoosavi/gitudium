@@ -3,6 +3,8 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
+import { buildDiffModel } from "../src/client/diffModel";
+import { expandDiffContext } from "../src/client/diffContext";
 import type { GitDiffAlgorithm, WhitespaceMode } from "../src/repository/types";
 
 const directories: string[] = [];
@@ -58,6 +60,56 @@ test("Git algorithms match Git output and reject unknown values", async () => {
   }
   expect(await reader.diff("HEAD")).toEqual(await reader.diff("HEAD", undefined, undefined, "none", "myers"));
   await expect(reader.diff("HEAD", undefined, undefined, "none", "unknown" as GitDiffAlgorithm)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+test("renamed and copied files compare their original contents in patches and full-file context", async () => {
+  const directory = await fixture();
+  const original = "-original\t\n☃.tsx";
+  const renamed = ":(glob)*.tsx";
+  const before = Array.from({ length: 20 }, (_, index) => `line ${index + 1}\n`).join("");
+  const after = before.replace("line 10\n", "line 10 changed\n");
+  await commit(directory, original, before, "Before");
+  await git(directory, "mv", "--", original, renamed);
+  await commit(directory, renamed, after, "Rename and edit");
+  const reader = await GitRepositoryReader.discover(directory);
+  expect((await reader.commit("HEAD")).files).toEqual([
+    { path: renamed, previousPath: original, status: "renamed", additions: 1, deletions: 1 },
+  ]);
+  const verify = async (path: string) => {
+    for (const algorithm of ["myers", "histogram", "patience", "minimal"] as const) {
+      const result = await reader.diff("HEAD", path, undefined, "none", algorithm);
+      expect(result.state).toBe("text");
+      if (result.state !== "text") return;
+      expect(result.patch).toContain("-line 10\n+line 10 changed\n");
+      expect(result.patch).not.toContain("+line 1\n");
+      const sources = await reader.sources("HEAD", path);
+      expect(sources.state).toBe("text");
+      if (sources.state !== "text") return;
+      const model = expandDiffContext(buildDiffModel(result.patch), sources, {}, true);
+      const rows = model.split.filter(row => !("header" in row) && !("gap" in row));
+      expect(rows).toHaveLength(20);
+      expect(rows[0]).toMatchObject({ left: { text: "line 1", number: 1 }, right: { text: "line 1", number: 1 } });
+      expect(rows[9]).toMatchObject({ left: { text: "line 10", kind: "deletion" }, right: { text: "line 10 changed", kind: "addition" } });
+    }
+  };
+  await verify(renamed);
+  await commit(directory, "copy.tsx", before, "Copy and edit");
+  expect((await reader.commit("HEAD")).files[0]).toMatchObject({ status: "copied", previousPath: renamed });
+  const copied = await reader.diff("HEAD", "copy.tsx");
+  expect(copied.state).toBe("text");
+  if (copied.state === "text") {
+    expect(copied.patch).toContain("-line 10 changed\n+line 10\n");
+    expect(copied.patch).not.toContain("+line 1\n");
+  }
+  await git(directory, "mv", "--", "copy.tsx", "pure-rename.tsx");
+  await git(directory, "commit", "-m", "Pure rename");
+  expect(await reader.diff("HEAD", "pure-rename.tsx")).toEqual({ state: "text", patch: "" });
+  await git(directory, "mv", "--", "pure-rename.tsx", "whitespace.tsx");
+  await commit(directory, "whitespace.tsx", before.replace("line 10\n", "line 10 \t\n"), "Rename and whitespace");
+  expect(await reader.diff("HEAD", "whitespace.tsx", undefined, "all")).toEqual({ state: "text", patch: "" });
+  const included = await reader.diff("HEAD", "whitespace.tsx");
+  expect(included.state).toBe("text");
+  if (included.state === "text") expect(included.patch).toContain("-line 10\n+line 10 \t\n");
 });
 
 test("diff whitespace modes distinguish trailing, internal and blank-line changes", async () => {

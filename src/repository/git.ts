@@ -271,7 +271,11 @@ export class GitRepositoryReader implements RepositoryReader {
     const whitespaceFlags = whitespace === "trailing" ? ["--ignore-space-at-eol"]
       : whitespace === "all" ? ["--ignore-all-space"]
       : whitespace === "all-and-blank-lines" ? ["--ignore-all-space", "--ignore-blank-lines"] : [];
-    const args = ["diff-tree", "--no-commit-id", "-r", "-p", "--root", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", `--diff-algorithm=${algorithm}`, ...whitespaceFlags, ...comparison, "--", ...(path === undefined ? [] : [path])];
+    const file = path === undefined ? undefined : (await this.files(id, signal)).find(file => file.path === path);
+    // A destination-only pathspec hides the rename/copy source from Git's tree diff.
+    const args = file?.previousPath && comparison.length === 2
+      ? ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--full-index", `--diff-algorithm=${algorithm}`, ...whitespaceFlags, `${comparison[0]}:${file.previousPath}`, `${id}:${file.path}`, "--"]
+      : ["diff-tree", "--no-commit-id", "-r", "-p", "--root", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", `--diff-algorithm=${algorithm}`, ...whitespaceFlags, ...comparison, "--", ...(path === undefined ? [] : [path])];
     try {
       const patch = await this.run(args, signal, MAX_DIFF);
       return /^Binary files .* differ$/m.test(patch) ? { state: "binary" } : { state: "text", patch };
