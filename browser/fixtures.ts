@@ -15,6 +15,7 @@ const details = (revision: string): CommitDetails => ({
 
 export class RepositoryFixture {
   textSources = false;
+  files: CommitDetails["files"] | null = null;
   failPagination = false;
   paginationAttempts = 0;
   refreshed = false;
@@ -76,7 +77,10 @@ export class RepositoryFixture {
           nextCursor: { snapshot: "fixture-snapshot", offset: 120 },
         } satisfies HistoryPage;
       }
-      case "commit": return details(input!.revision as string);
+      case "commit": {
+        const commit = details(input!.revision as string);
+        return { ...commit, files: this.files ?? commit.files };
+      }
       case "diff": return { state: "text", patch: `diff --git a/${input!.path} b/${input!.path}\n--- a/${input!.path}\n+++ b/${input!.path}\n@@ -1,1 +1,81 @@\n context\n${Array.from({ length: 80 }, (_, i) => `+${input!.path} fixture line ${i}`).join("\n")}\n` };
       case "sources": return this.textSources ? { state: "text", before: null, after: {
         revision: input!.revision, path: input!.path,

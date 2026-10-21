@@ -1,5 +1,28 @@
 import { test, expect, id } from "./fixtures";
 
+test("changed file paths use the full row above their metadata", async ({ page, repository }) => {
+  const path = "web/src/pages/client-tunnel-config-page/ClientTunnelConfigPage.tsx";
+  const previousPath = "web/src/pages/client-tunnel-config-page/TunnelConfigPage.tsx";
+  repository.files = [{ path, previousPath, status: "renamed", additions: 20, deletions: 14 }];
+  await page.locator('[data-commit-index="0"]').click();
+  const button = page.locator(".files button");
+  await expect(button).toContainText(path);
+  await page.locator(".files-panel").evaluate(element => {
+    (element as HTMLElement).style.width = "320px";
+  });
+  const label = await button.locator("code").boundingBox();
+  const metadata = await button.locator(".file-metadata").boundingBox();
+  const row = await button.boundingBox();
+  expect(label).not.toBeNull();
+  expect(metadata).not.toBeNull();
+  expect(row).not.toBeNull();
+  expect(metadata!.y).toBeGreaterThanOrEqual(label!.y + label!.height);
+  expect(label!.x + label!.width).toBeGreaterThan(row!.x + row!.width - 25);
+  await expect(button.locator(".file-metadata")).toHaveText("renamed+20−14");
+  await expect(button).toHaveAttribute("title", `${previousPath} → ${path}`);
+  expect(await button.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
 test("keyboard selection reveals and focuses offscreen virtualized commits", async ({ page, repository }) => {
   const first = page.locator('[data-commit-index="0"]');
   const last = page.locator('[data-commit-index="119"]');

@@ -130,12 +130,13 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .file-tree summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .file-tree summary svg { vertical-align: middle; margin-right: 6px; }
 .file-tree button { padding-left: 18px; }
-.files button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 0; padding: 6px 18px; }
+.files button { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; gap: 4px 10px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 0; padding: 6px 18px; }
 .files code { overflow-wrap: anywhere; min-width: 0; font-size: 12px; }
+.file-metadata { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .file-status { color: #91b7ed; font: 600 11px monospace; flex-shrink: 0; }
 .file-status.added { color: #91c499; }
 .file-status.deleted { color: #ed9690; }
-.file-kind { margin-left: auto; color: var(--muted); font-size: 11px; }
+.file-kind { color: var(--muted); font-size: 11px; }
 .previous-path { color: var(--muted); }
 .file-change-summary { display: inline-flex; gap: 6px; flex-shrink: 0; white-space: nowrap; font: normal 11px monospace; color: var(--muted); }
 .diff-heading .file-change-summary { margin-left: 8px; }
