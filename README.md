@@ -1,209 +1,61 @@
+<!--
+AI agents maintaining this file: keep the README concise and user-facing.
+Focus on what Gitudium is (with a screenshot), downloading and installing it,
+and getting started. Keep development guidance brief and use pnpm commands.
+Assume readers already know Git and Git GUIs; skip explanations of those basics.
+Do not turn this file into a changelog, exhaustive feature list, or implementation
+reference. Put detailed technical documentation elsewhere and link it only when
+useful. Update instructions, requirements, download links, and the screenshot
+when user-visible changes make them inaccurate; do not append notes for every change.
+-->
+
 # Gitudium
 
-**Browse local Git history in a read-only browser workspace.**
+A local Git viewer in your browser.
 
-Gitudium lets you explore commits, filter history by reference, and inspect file changes without leaving your machine. It does not modify your repository.
+![Gitudium showing a commit log, changed files, and a side-by-side diff](docs/images/gitudium.png)
 
-![Gitudium showing a commit log, a changed-file tree, and a side-by-side diff](docs/images/gitudium.png)
+## Download and install
 
-## Features
+**[Download Gitudium](https://github.com/smmoosavi/gitudium/releases/latest/download/gitudium)** · [All releases](https://github.com/smmoosavi/gitudium/releases)
 
-- **Inspect local changes:** select the pinned **Local changes** row above the commit log. **All** compares your working tree with the current commit (`HEAD`), including staged edits, unstaged edits, and untracked files. **Staged**, **Unstaged**, and **Untracked** tabs isolate each scope, with counts and per-file staging badges. New files show their contents; ignored files are excluded. Files with staged and unstaged edits that cancel each other remain listed, even when their net diff is empty. Local changes refresh automatically and can be refreshed manually. The workspace stays read-only.
-- **Explore history:** browse a compact commit graph with branch and tag labels, filter by reference, and load more history as needed. Main branches, development branches, and HEAD take priority from left to right; first-parent histories stay straight, side branches fork right and connect near their first unique commit, and disconnected histories reuse free space. Every merge parent is connected, roots have double-dot markers, and unloaded parents remain open at the bottom.
-- **Inspect commits:** read commit messages, author information, and changed files.
-- **Compare changes:** switch between unified and side-by-side text diffs, with line numbers and optional line wrapping. Open **Diff options** using the settings icon on the right of the diff toolbar to independently select **Line alignment** (Simple, Similarity, Syntax-aware), **Git algorithm** (Myers, Histogram, Patience, Minimal), and **Whitespace** (Include, Ignore). Defaults are Simple, Myers, and Include; settings persist across commits and reloads. **Reset to defaults** restores the defaults. The popover never moves the diff; Full file, Wrap, and Unified/Split remain directly accessible. Syntax-aware mode matches lines and highlights changes using Web Tree-sitter syntax tokens. It matches tokens across a whole replacement block, using strongly matching lines as anchors so inserted branches do not steal matches from existing code. Entirely new or removed lines use the line background rather than redundant word highlights. It preserves unchanged syntax when expressions are wrapped or lines are reflowed, and prioritizes identifiers and literals over punctuation or indentation. JSON strings are matched as complete quoted tokens, with object keys distinct from values, so quotes cannot match unrelated strings on adjacent lines. JSON object and array paths also scope matching: deleting a nested configuration block cannot borrow matching braces or values from a surviving sibling object, even when Git treats those braces as unchanged context. Unchanged indentation before matched JSON keys and closing delimiters is not word-highlighted. Formatting changes remain visible, including Python indentation. This is a bounded, token-based refinement of Git’s patch, not Difftastic’s full tree-edit or moved-code algorithm. Loading and fallback details appear in the options popover and button’s hover tooltip, without moving the diff. JavaScript/JSX, TypeScript/TSX, Python, JSON, CSS, Go, and Rust grammars are bundled locally. Unsupported languages, parse errors, oversized files, or worker timeouts fall back to the simple diff. Parsing runs in a worker, with a 1 MiB per-side limit, a five-second timeout, and bounded matching work. Select **Ignore** under Whitespace to filter whitespace-only changes; the current diff stays visible until the updated comparison is ready.
-- **Navigate files:** choose a flat list or a collapsible folder tree.
-- **Arrange your workspace:** choose from three layouts and resize independently scrolling panes. Layout, pane sizes, and view preferences are remembered in your browser.
-- **Stay up to date:** commits, branch switches, and reference changes refresh the view automatically.
+Requires [Bun](https://bun.sh/) **1.3.14 or newer** and [Git](https://git-scm.com/) **2.43.0 or newer**.
 
-## Install and launch
-
-### Requirements
-
-- [Bun](https://bun.sh/) **1.3.14 or newer**, available on your `PATH`.
-- [Git](https://git-scm.com/) **2.43.0 or newer**.
-
-Gitudium has been validated on Linux. Other platforms and older runtime versions have not been validated.
-
-### Download
-
-Download the `gitudium` asset from the [latest GitHub release](https://github.com/smmoosavi/gitudium/releases/latest).
-
-Make it executable, then launch it with the path to the repository you want to browse:
+Make the downloaded file executable, then move it to a directory on your `PATH`:
 
 ```sh
 chmod +x ./gitudium
-./gitudium /path/to/repository
 ```
 
-If you launch it from inside a repository, the directory argument is optional. Repository subdirectories and linked worktrees are also supported.
-
-The download is a **single executable JavaScript file, not a native binary**. It bundles the application and frontend assets, but still requires Bun and Git. There is no npm package to install, and you do not need a project checkout or adjacent files.
-
-Alternatively, invoke it directly with Bun:
+## Use
 
 ```sh
-bun ./gitudium /path/to/repository
+# Open the repository in the current directory
+gitudium
+# Or specify a repository
+gitudium /path/to/repository
 ```
 
-### Open the viewer
+Open the **full URL printed in the terminal**, including its `#token=…` fragment.
 
-Open the **full URL printed in the terminal**, including its `#token=…` fragment. By default, Gitudium serves the viewer at `http://127.0.0.1:9171/`.
-
-Keep the terminal running while you browse. Press **Ctrl+C** to stop the server.
-
-## Browse a repository
-
-1. Choose or type **References** in the log pane. An empty selection shows **All references + HEAD**. Autocomplete groups refs by namespace, including custom namespaces such as `refs/agents`. Typing a nonempty token automatically highlights the first matching suggestion; press **Enter** or **comma** to select it, or use **Up/Down** to choose a different suggestion. Clicking also selects a suggestion. A comma starts the next selection. An empty token (including after a trailing comma) does not automatically select anything; **Enter** applies the existing selections without adding another ref. Press **Enter** to apply typed expressions. Once autocomplete is closed, press **Enter** again to focus the selected commit (or the first commit if none is selected), then use `j`/`k` to navigate history. Suggestions appear in this order: **all**, **HEAD**, local branches, remote branches, other ref namespaces, then tags. Click a namespace heading to collapse or expand its suggestions. Select or type `all` for all refs + HEAD; it can also be combined with exclusions, such as `all, !refs/agents/*`. Examples: `HEAD, main, origin/main`, `main, !vis`, `main, !refs/agents/*`, `my-feature`, and `docs/*`. Positive selections combine histories; `!` excludes matching refs and all commits reachable from them (including shared ancestors). Wildcards match full ref names or branch/tag/remote shorthand; a trailing `/*` matches all refs below that path, including nested names. A negative-only expression starts from all refs + HEAD; an unmatched wildcard selects no refs. Clear the field to restore all history.
-2. Select a commit to see its details and changed files.
-3. Select a changed file to view its diff. Renamed and copied files compare against their original source, so unchanged lines remain context rather than appearing as an entirely new file.
-4. Scroll through history. The initial request loads up to 10,000 commit summaries in topological order; another chunk loads automatically near the bottom. Loaded chunks stay in browser memory without a total-count cap, while only visible rows and a small overscan are rendered. Commit messages, changed files, and diffs load when selected. Git output is still subject to the server's 8 MiB per-command safety limit.
-
-Use the **gear icon at the right of the Log header** to save **Exclude refs**, for example `refs/agents/*, foo, bar`. Commas separate patterns; whitespace around entries and empty entries are ignored. Full names match their ref namespace; bare names such as `foo` match local branches (`refs/heads/foo`). A trailing `/*` covers nested refs. Unmatched patterns are harmless.
-
-Saved exclusions omit matching refs from the default/all-reference history roots and hide their log labels, using Git's `--exclude` semantics rather than removing shared ancestors. Commits reachable from another included ref or HEAD still appear. Explicit positive selections in **References** (including globs and `all, refs/agents/my-task`) override saved exclusions; `all` alone does not. Selector `!` expressions still remove reachable history as described above. Excluded refs remain available in autocomplete so they can be explicitly selected. Save applies immediately and clears the selected commit; Cancel or Escape discards edits. The setting persists across reloads and repositories on the same browser origin.
-
-Pagination cursors contain only a fixed-size snapshot ID and an offset, so URLs do not grow with the number of references. The server retains immutable history tips for the 128 most recently used snapshots, preserving pagination order when references change. After server restart or snapshot eviction, reload history to obtain a new cursor.
-
-The history chunk size and server request maximum share `HISTORY_CHUNK_SIZE` in [src/repository/limits.ts](src/repository/limits.ts). Change that constant to tune both together. Timeout durations and scroll distances are unrelated settings.
-
-The graph keeps its lane layout while sizing its display to visible rows and overscan, including passing connections. Its width is capped at 35% of the log pane or 180 px, whichever is smaller; expansion starts immediately and shrinking is delayed briefly to avoid jitter. Width changes animate gently over 160 ms unless reduced motion is enabled. Dense sections show a shared horizontal graph scrollbar above the list (also operable with Left/Right and Home/End), leaving commit text stationary. Rows stay 100 px tall: subjects use up to two lines, author/date stays on one line, and references show the first label plus a `+N` count. Hover truncated text or labels for the full values; selecting a commit opens its full details.
-
-Diff line pairing computes each change block once and shares its pairing decisions and inline highlights between unified and split output. Similarity scoring and inline highlighting retain separate per-patch budgets: 4,096 candidate line pairs, 100 lines per block, 4,096 characters per line, and (for each word highlighter) 512 tokens per side, 65,536 cells per pair, and 1,000,000 cells per patch. Budget exhaustion retains the existing positional-pairing or whole-line-highlight fallback. Run `pnpm exec bun scripts/benchmark-diff.ts` to measure paired-mode computation; an optional baseline module path enables alternating old/new measurements.
-
-Syntax highlighting keeps a lazy worker and a bounded cache for the viewer's lifetime, including commit switches and empty detail panes during navigation debounce. Returning to a recently highlighted file can reuse its tokens (up to four results and 200,000 cached tokens). Superseded requests cannot publish stale highlighting; selection and expanded context still reset with each commit. Unmounting the viewer terminates the worker and clears its cache and timers.
-
-Empty and bare repositories are supported. Failed requests provide a **Retry** button.
-
-### Keyboard navigation
-
-Commit selection and focus update immediately. The first selection loads details immediately; rapid changes wait until selection has been idle for 100 ms before loading the latest commit. Superseded detail requests are cancelled independently. During the debounce, detail panes stay empty without flashing a loading illustration or message, avoiding details for the wrong commit.
-
-The focused commit or file has an outline. Keyboard navigation moves browser focus with selection, so **Enter/Space** act on the current item. **Tab** also selects the commit or file it focuses. Press `j`/`k` to select the next/previous commit. Selecting a different commit automatically selects its first changed file in display order and loads its diff, without moving focus out of the commits pane. Press `l` to focus changed files (selecting the first file if needed), then use `j`/`k` to select files in display order. Press `l` again to focus the diff, where `j`/`k` scroll down/up. Press `h` to return from the diff to files, from files to commits, or from commits to the reference selector. In the reference selector, `l` and **Right** retain their normal text-editing behavior; use the final **Enter** to return to commits. Press `n`/`p` to select the next/previous item in the parent pane without changing focus: from files, switch commits and show their first file; from the diff, switch files and start at the top of the new diff. Selected commits and files automatically scroll into view, including during parent-pane navigation. Navigation stops at list boundaries.
-
-In commits, **Home/End** select the first/last currently loaded commit. **End** also brings the bottom into view to trigger the next history chunk; press it again after loading to select the new last commit. In files (list or tree), **Home/End** select the first/last file in display order. **Home** also scrolls up to show the commit details; pressing `k` or **Up** when the first file is already selected does the same, keeping that file focused.
-
-In the focused diff, **Page Up/Page Down** scroll by one visible page, and **Home/End** jump to the start/end of the diff.
-
-Arrow keys work the same way: **Down/Up** select items or scroll the diff, and **Right/Left** move focus forward/back between panes. Focused view toggles and dividers retain their own arrow-key controls.
-
-For commits without changed files, `l` or **Right** keeps focus on commits. Selection stops at the ends of the loaded list; approaching the bottom automatically loads more history. Clicking a pane also focuses it. Shortcuts are ignored in text fields, the reference selector, and when modifier keys are held.
-
-### Customize the view
-
-- **Layout:** use the controls at the top right to choose three columns, a log beside files above the diff, or log and files above a full-width diff.
-- **Pane sizes:** drag a divider to resize panes. Double-click it to restore the default size.
-- **Changed files view:** switch between a flat list and a folder tree using the controls beside the changed-file count.
-- **Diff view:** switch between unified and side-by-side comparisons using the controls in the diff heading.
-- **Wrap diff lines:** use the button beside the diff-view controls to wrap long lines instead of scrolling horizontally.
-
-Changing the layout or file view keeps your current commit and file selected. Preferences persist across reloads when browser storage is available.
-
-The view toggles support **Tab**, **Enter/Space**, **Left/Right**, and **Home/End**. Focus a divider and use **Left/Right** for vertical dividers or **Up/Down** for horizontal dividers; **Home/End** move to the size limits.
-
-### How changes are displayed
-
-- Regular commits are compared with their parent; merge commits are compared with their **first parent**.
-- A repository's first commit is compared with an empty tree.
-- Added and deleted files always use unified diffs, without changing your saved diff preference.
-- Renames appear as a deletion and an addition.
-- Binary files show a status message rather than a text diff. Patches larger than **1 MiB** are not displayed.
-
-### Live updates
-
-Gitudium refreshes history when another tool creates commits, switches branches, or changes references. Your selected reference, commit, and file are preserved while history reloads from its first page.
-
-The status bar shows the live-update connection. If it disconnects, the current view stays visible with a stale-data warning; reconnecting automatically refreshes it. A deleted selected reference is shown as unavailable rather than silently replaced.
-
-**Uncommitted working-tree edits are not monitored or displayed.** Gitudium is a history viewer, not a staging, editing, or merge tool.
-
-## Command-line options
+To choose a different port or see all launch options:
 
 ```sh
-./gitudium --help
-./gitudium --version
-./gitudium --port 8080 /path/to/repository
-./gitudium -p 8080 -d /path/to/repository
+gitudium --port 8080 /path/to/repository
+gitudium --help
 ```
 
-| Option | Purpose | Default |
-| --- | --- | --- |
-| `-h`, `--help` | Show usage and exit | — |
-| `-v`, `--version` | Show version and exit | — |
-| `-p`, `--port <port>` | Choose the local server port | `9171` |
-| `-d`, `--directory <path>` | Choose the repository directory | Current directory |
-| `[directory]` | Positional alternative to `--directory` | Current directory |
+## Development
 
-You can also set `GITUDIUM_PORT` and `GITUDIUM_DIRECTORY`:
-
-```sh
-GITUDIUM_PORT=8080 GITUDIUM_DIRECTORY=/path/to/repository ./gitudium
-```
-
-Command-line values override environment variables. Relative directory paths are resolved from the directory where you launch Gitudium. Use either a positional directory or `--directory`, not both. Put `--` before a positional directory name that begins with a dash.
-
-Ports must be between `0` and `65535`. Use `--port 0` to select a free port and open the URL printed at startup. If a specified port is already occupied, startup fails rather than silently choosing another port.
-
-## Local access and privacy
-
-Gitudium binds only to **127.0.0.1** and serves your repository locally. Each launch creates a new access token carried in the printed browser URL. The browser removes the token fragment from the address bar and keeps it in tab-scoped session storage for reloads.
-
-- Keep the launch URL private: it grants access to the running viewer.
-- Open the full launch URL when opening a new tab.
-- After restarting Gitudium, use the newly printed URL; the old token no longer works.
-- Do not expose or forward the server port. Use trusted repositories.
-
-Access protection does not isolate repository contents from other processes, browser extensions, or people with access to the same machine or browser. View preferences are stored in browser local storage; if storage is blocked, preferences are temporary and a reload may require reopening the full launch URL.
-
-## Troubleshooting
-
-| Problem | What to do |
-| --- | --- |
-| Missing interpreter or Bun not found | Install Bun and ensure it is on `PATH`, or run the file with your Bun executable. |
-| Permission denied when launching | Run `chmod +x ./gitudium`, or use `bun ./gitudium`. |
-| Port already in use | Choose another port with `--port 8080`, or use `--port 0`. |
-| Repository cannot be opened | Check that the path exists and is a Git repository or a directory inside one, and that Git is available on `PATH`. |
-| Authentication fails after a restart or in a new tab | Reopen the full URL printed by the current server, including the token fragment. |
-| History appears stale | Check the live-update indicator. The viewer refreshes when it reconnects; working-tree-only edits do not trigger updates. |
-| No text diff is available | Binary files, oversized patches, and files with no textual changes show status messages instead of a patch. |
-
-## Build from source
-
-If you prefer to build your own copy, install **Node.js 24**, **pnpm 11.17.0**, Bun, and Git, then run:
+With **Node.js 24**, **pnpm 11.17.0**, Bun, and Git installed:
 
 ```sh
 git clone https://github.com/smmoosavi/gitudium.git
 cd gitudium
 pnpm install --frozen-lockfile
-pnpm run build
-./gitudium /path/to/repository
+pnpm run dev
 ```
 
-The build creates the single-file `gitudium` executable at the checkout root. You can copy that file elsewhere; only Bun and Git are needed to run it.
+Open the full development URL printed in the terminal. To browse another repository, use `pnpm run dev --directory /path/to/repository`.
 
-### Development server
-
-Run `pnpm run dev` (optionally with `--port <backend-port>` and `--directory <repository>`). Vite serves the browser on `http://127.0.0.1:5173` and proxies `/api` to the loopback backend, which defaults to port 3000 and requires a nonzero port. Open the full development URL printed by the backend. The launcher shares a fresh token with the backend; `pnpm run dev:server` alone generates its own token unless `GITUDIUM_DEV_TOKEN` is supplied.
-
-Both startup paths use `src/server/server.ts` for access protection, API routing, and shutdown. Development explicitly allows the Vite browser origin and serves no backend assets; the packaged entrypoint supplies embedded assets and allows only its own origin. CLI defaults, printed URLs, and the single-file distribution are unchanged. SIGINT/SIGTERM close repository discovery, monitoring, event streams, and the listener before exiting. Importable factory instances own those resources and must be disposed with `await instance.close()`; tests using `createRequestHandler` directly must also close their handlers.
-
-### Persistent client settings
-
-Client settings use typed descriptors in `src/client/preferences.ts` and the shared `usePreference` hook in `src/client/usePreference.ts`. A descriptor supplies a default factory and storage read/write functions; readers must validate stored values and fall back for missing or malformed data. Define descriptors at module scope so their identity stays stable between renders. The hook loads once and persists state changes, including functional updates, while tolerating unavailable or full local storage.
-
-Existing versioned storage keys and encodings are preserved. Settings are browser-origin-wide (not repository-specific); changing the host or port uses a different store. Do not store access tokens or repository contents in these preferences. Repository-specific settings should use an explicit repository scope when introduced. Saved ref exclusions are persisted; the current References selector expression remains temporary.
-
-### Validation
-
-```sh
-pnpm test
-pnpm run typecheck
-pnpm exec playwright install chromium
-pnpm run test:browser
-pnpm run build
-pnpm run test:artifact
-```
-
-The mounted browser suite starts its own Vite server on `127.0.0.1:5174` (that port must be free). It uses Chromium with deterministic tRPC route fixtures and a controlled SSE stream, not a running Git repository or API server. It covers virtualized keyboard selection/focus/scrolling, files-to-diff navigation, pagination failure/retry, reference changes, and live refresh while inspecting older details. Assertions wait for observable UI states; there are no arbitrary sleeps. Browser cases use `*.browser.ts` so `pnpm test` continues to run the existing Bun tests independently. Browser binaries and their OS dependencies must be available; on supported CI hosts, `pnpm exec playwright install --with-deps chromium` can provision them.
-
-`src/client/App.tsx` exports the application component; `src/client/main.tsx` retains the production bootstrap, StrictMode, QueryClient provider, access-token gate, and stylesheet. The browser suite loads that same entry point. It supplements pure tests and HTTP artifact smoke coverage, but does not certify other browsers or real SSE transport/repository behavior.
+Run `pnpm test` and `pnpm run typecheck` to check changes. Run `pnpm run build` to create the single-file `gitudium` executable.
