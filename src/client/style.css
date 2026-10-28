@@ -95,6 +95,28 @@ select { min-width: 0; max-width: 100%; color: inherit; background: #25262a; bor
 .muted { color: var(--muted); font-size: 12px; }
 .history-panel > p, .history-panel > .failure { margin: 8px 16px 12px; }
 .history-panel > button { margin: 12px 16px; }
+.local-changes-pinned { border-block: 1px solid var(--border); }
+.local-changes-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; text-align: left; background: transparent; border: 0; border-radius: 0; }
+.local-changes-row > svg { flex-shrink: 0; color: #9eb3e8; }
+.local-changes-row > span:first-of-type { min-width: 0; }
+.local-changes-row strong { display: block; font-size: 12px; font-weight: 500; }
+.local-changes-row small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.local-changes-row:hover { background: #303238; }
+.local-changes-row[aria-pressed="true"] { background: #2e436e; box-shadow: inset 3px 0 #789cff; }
+.local-count { margin-left: auto; padding: 2px 7px; border: 1px solid #50535a; border-radius: 10px; font-size: 11px; }
+.local-summary { padding: 14px 16px; }
+.local-summary p { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.local-refresh { padding: 3px 7px; font-size: 11px; }
+.local-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+.local-tabs button { display: flex; align-items: center; gap: 6px; padding: 10px 6px; border: 0; border-radius: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 11px; }
+.local-tabs button:hover { background: #303238; }
+.local-tabs button[aria-selected="true"] { border-bottom-color: #789cff; color: #dfe1e5; }
+.local-tabs .count { padding: 0 4px; background: #393b40; border-radius: 4px; }
+.local-badge { padding: 0 4px; border: 1px solid #50535a; border-radius: 3px; font-size: 10px; line-height: 16px; }
+.local-badge.staged { color: #91c499; }
+.local-badge.unstaged { color: #e7be83; }
+.local-badge.untracked { color: #9eb3e8; }
+.local-badge.conflicted { color: #ed9690; }
 .commits, .files { list-style: none; padding: 0; margin: 0; }
 .commits button { position: relative; width: 100%; height: 100px; overflow: hidden; text-align: left; border: 0; border-radius: 0; padding: 12px 16px 10px calc(var(--graph-viewport-width) + 8px); background: transparent; border-bottom: 1px solid #303237; }
 .commits button .commit-graph-window { position: absolute; inset: 0 auto 0 0; width: var(--graph-viewport-width); margin: 0; overflow: hidden; pointer-events: none; }

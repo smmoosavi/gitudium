@@ -31,12 +31,13 @@ interface HistoryPaneProps {
   canLoadMore: boolean;
   onLoadMore: () => void;
   fetchingNextPage: boolean;
+  localChanges?: { count: number | undefined; selected: boolean; pending: boolean; error: boolean; onSelect: () => void };
 }
 
 export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocus, revision, onRevisionChange, refExclusions = "", onRefExclusionsChange,
   references, referencesPending, referencesSuccess, referencesError, onReferencesRetry,
   historyPending, historySuccess, historyError, onHistoryRetry, commits, head, selected, onSelect,
-  canLoadMore, onLoadMore, fetchingNextPage }: HistoryPaneProps) {
+  canLoadMore, onLoadMore, fetchingNextPage, localChanges }: HistoryPaneProps) {
   const listRef = useRef<CommitListHandle>(null);
   const setListRef = useCallback((handle: CommitListHandle | null) => {
     listRef.current = handle;
@@ -45,6 +46,11 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
   }, [commitListRef]);
   const focusCommits = () => {
     onPaneFocus("commits");
+    if (localChanges?.selected || (localChanges && !commits.length)) {
+      localChanges.onSelect();
+      if (historyRef && typeof historyRef !== "function") historyRef.current?.querySelector<HTMLButtonElement>(".local-changes-row")?.focus();
+      return;
+    }
     const index = Math.max(0, commits.findIndex(commit => commit.id === selected));
     if (commits[index]) onSelect(commits[index].id);
     listRef.current?.reveal(index, true);
@@ -54,6 +60,12 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
         <div className="panel-heading log-heading"><h2 id="history-title">Log</h2>{onRefExclusionsChange && <LogSettings value={refExclusions} onChange={onRefExclusionsChange} />}</div>
         <div className="history-toolbar">
         <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} onCommitFocus={focusCommits} /></div>
+        {localChanges && <div className="local-changes-pinned"><button type="button" className="local-changes-row" aria-pressed={localChanges.selected}
+          onFocus={localChanges.onSelect} onClick={localChanges.onSelect}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 3h10l4 4v14H5Z M14 3v5h5 M8 12h8 M8 16h5" /></svg>
+          <span><strong>Local changes</strong><small>{localChanges.error ? "Refresh failed · Select to retry" : localChanges.pending ? "Checking working tree…" : localChanges.count === 0 ? "Working tree clean" : "Staged, unstaged & untracked"}</small></span>
+          {localChanges.count !== undefined && <span className="local-count">{localChanges.count}</span>}
+        </button></div>}
         {referencesPending && <p role="status">Loading references…</p>}
         {referencesError && <Failure error={referencesError} retry={onReferencesRetry} />}
         {historyPending && <p role="status">Loading history…</p>}

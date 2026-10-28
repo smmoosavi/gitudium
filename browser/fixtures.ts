@@ -1,5 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test";
-import type { CommitDetails, CommitSummary, HistoryPage, RepositoryMetadata, Reference } from "../src/repository/types";
+import type { CommitDetails, CommitSummary, HistoryPage, RepositoryMetadata, Reference, LocalChanges } from "../src/repository/types";
 
 export const id = (index: number) => (index + 1).toString(16).padStart(40, "0");
 const author = { name: "Fixture Author", email: "fixture@example.test", date: "2026-01-01T12:00:00Z" };
@@ -14,6 +14,8 @@ const details = (revision: string): CommitDetails => ({
 });
 
 export class RepositoryFixture {
+  localChanges: LocalChanges = { available: true, head: id(0), version: "initial", files: [] };
+  localText = "working fixture";
   textSources = false;
   files: CommitDetails["files"] | null = null;
   failPagination = false;
@@ -60,6 +62,9 @@ export class RepositoryFixture {
 
   private response(method: string, input: Record<string, unknown> | undefined): unknown {
     switch (method) {
+      case "localChanges": return this.localChanges;
+      case "localDiff": return { state: "text", patch: `--- a/${input!.path}\n+++ b/${input!.path}\n@@ -1 +1 @@\n-${input!.scope === "unstaged" ? "staged fixture" : "head fixture"}\n+${input!.scope === "staged" ? "staged fixture" : this.localText}\n` };
+      case "localSources": return { state: "text", before: { revision: "before", path: input!.path, text: `${input!.scope === "unstaged" ? "staged fixture" : "head fixture"}\n` }, after: { revision: this.localChanges.version, path: input!.path, text: `${input!.scope === "staged" ? "staged fixture" : this.localText}\n` } };
       case "metadata": return {
         root: "/fixtures/workspace", gitDirectory: "/fixtures/workspace/.git", commonDirectory: "/fixtures/workspace/.git",
         bare: false, head: id(this.refreshed ? 300 : 0), branch: "main", objectFormat: "sha1",

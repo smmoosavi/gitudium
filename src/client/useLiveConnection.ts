@@ -8,7 +8,7 @@ export function useLiveConnection(token: string) {
   const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("connecting");
   useEffect(() => {
     const refresh = createLiveRefresh(queryClient);
-    const close = connectEvents(token, () => { void refresh.refresh(); }, setConnection);
+    const close = connectEvents(token, () => { void queryClient.invalidateQueries({ queryKey: ["localChanges"] }); void refresh.refresh(); }, setConnection);
     return () => { close(); refresh.close(); };
   }, [queryClient, token]);
   return connection;

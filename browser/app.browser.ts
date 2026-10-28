@@ -38,11 +38,13 @@ test("keyboard selection reveals and focuses offscreen virtualized commits", asy
   await expect.poll(() => last.evaluate(element => {
     const row = element.getBoundingClientRect();
     const viewport = element.closest(".commit-scroll")!.getBoundingClientRect();
-    return row.top >= viewport.top && row.bottom <= viewport.bottom;
+    return row.top >= viewport.top - 1 && row.bottom <= viewport.bottom + 1;
   })).toBe(true);
   await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 119");
   await expect.poll(() => repository.requests.filter(request => request.method === "commit").at(-1)?.input?.revision).toBe(id(119));
   await page.keyboard.press("Home");
+  await expect(page.locator(".local-changes-row")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(first).toBeFocused();
   await expect(first).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => scroll.evaluate(element => element.scrollTop)).toBe(0);

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
+import { LocalChangesReader } from "./local";
+import type { LocalScope } from "./types";
 import type {
   ChangedFile, CommitDetails, DiffResult, HistoryPage,
   HistoryQuery, Reference, RepositoryMetadata, RepositoryReader, SourceFile, SourceResult, WhitespaceMode, GitDiffAlgorithm,
@@ -31,11 +33,17 @@ function validatePath(path: string): void {
 
 export class GitRepositoryReader implements RepositoryReader {
   private readonly runner: GitRunner;
+  private readonly local: LocalChangesReader;
   private readonly historySnapshots = new Map<string, { tips: string[]; revision: string; exclude: string }>();
 
   private constructor(cwd: string) {
     this.runner = new GitRunner(cwd);
+    this.local = new LocalChangesReader(cwd, this.run.bind(this));
   }
+
+  localChanges(signal?: AbortSignal) { return this.local.changes(signal); }
+  localDiff(scope: LocalScope, path: string, signal?: AbortSignal, whitespace?: WhitespaceMode, algorithm?: GitDiffAlgorithm) { return this.local.diff(scope, path, signal, whitespace, algorithm); }
+  localSources(scope: LocalScope, path: string, signal?: AbortSignal) { return this.local.sources(scope, path, signal); }
 
   static async discover(cwd: string, signal?: AbortSignal): Promise<GitRepositoryReader> {
     const reader = new GitRepositoryReader(cwd);

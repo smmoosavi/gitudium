@@ -5,7 +5,7 @@ import { ViewToggle, layoutOptions } from "./ViewToggle";
 import { ResizeHandle } from "./ResizeHandle";
 import type { FocusedPane } from "./navigation";
 import { useKeyboardNavigation, type DetailNavigationAdapter } from "./useKeyboardNavigation";
-import { token } from "./api";
+import { api, token } from "./api";
 import { Failure } from "./Failure";
 import { CommitView } from "./CommitView";
 import { HistoryPane } from "./HistoryPane";
@@ -16,6 +16,9 @@ import { viewerPreferences } from "./preferences";
 import { usePreference } from "./usePreference";
 import { useCommitSelection } from "./useCommitSelection";
 import { useSyntaxService } from "./useSyntaxService";
+import { useQuery } from "@tanstack/react-query";
+import type { LocalScope } from "../repository/types";
+import { LOCAL_CHANGES_ID } from "./localChanges";
 
 export function App() {
   const { wrap, setWrap, filesMode, setFilesMode, diffMode, setDiffMode, layout, setLayout } = useViewerPreferences();
@@ -31,7 +34,9 @@ export function App() {
     : split(sizes.primary);
   const [revision, setRevision] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const detailId = useCommitSelection(selected);
+  const localSelected = selected === LOCAL_CHANGES_ID;
+  const detailId = useCommitSelection(localSelected ? null : selected);
+  const [localScope, setLocalScope] = useState<LocalScope>("all");
   const syntaxService = useSyntaxService();
   const [focusedPane, setFocusedPane] = useState<FocusedPane>("commits");
   const historyRef = useRef<HTMLElement>(null);
@@ -39,21 +44,31 @@ export function App() {
   const connection = useLiveConnection(token!);
   const [refExclusions, setRefExclusions] = usePreference(viewerPreferences.refExclusions);
   const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision, refExclusions);
+  const localChanges = useQuery({ queryKey: ["localChanges"], enabled: metadata.isSuccess && !metadata.data.bare,
+    queryFn: ({ signal }) => api.localChanges.query(undefined, { signal }), refetchInterval: 2000, retry: false });
+  const hasLocalRow = metadata.isSuccess && !metadata.data.bare;
+  const commitOffset = hasLocalRow ? 1 : 0;
+  const selectedCommitIndex = commits.findIndex(commit => commit.id === selected);
+  const revealHistory = (index: number, focus: boolean) => {
+    if (hasLocalRow && index === 0) {
+      if (focus) historyRef.current?.querySelector<HTMLButtonElement>(".local-changes-row")?.focus({ preventScroll: true });
+    } else commitListRef.current?.reveal(index - commitOffset, focus);
+  };
   const detailNavigationRef = useRef<DetailNavigationAdapter | null>(null);
   useKeyboardNavigation({
     focusedPane,
     commits: {
-      count: commits.length,
-      selectedIndex: commits.findIndex(commit => commit.id === selected),
-      select: index => setSelected(commits[index]!.id),
-      reveal: (index, focus) => commitListRef.current?.reveal(index, focus),
+      count: commits.length + commitOffset,
+      selectedIndex: localSelected ? 0 : selectedCommitIndex < 0 ? -1 : selectedCommitIndex + commitOffset,
+      select: index => setSelected(hasLocalRow && index === 0 ? LOCAL_CHANGES_ID : commits[index - commitOffset]!.id),
+      reveal: revealHistory,
     },
     details: detailNavigationRef,
     focusReferences: () => historyRef.current?.querySelector<HTMLInputElement>("#reference")?.focus(),
   });
   useEffect(() => {
-    const index = commits.findIndex(commit => commit.id === selected);
-    commitListRef.current?.reveal(index, focusedPane === "commits" && selected !== null);
+    const index = localSelected ? 0 : selectedCommitIndex < 0 ? -1 : selectedCommitIndex + commitOffset;
+    revealHistory(index, focusedPane === "commits" && selected !== null);
   }, [selected, focusedPane]);
   const repositoryPath = metadata.data?.root ?? metadata.data?.gitDirectory;
   const repositoryName = repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1);
@@ -77,10 +92,15 @@ export function App() {
         historyPending={history.isPending} historySuccess={history.isSuccess} historyError={history.isError ? history.error : null}
         onHistoryRetry={() => void (history.isFetchNextPageError ? history.fetchNextPage() : history.refetch())}
         commits={commits} head={metadata.data?.head} selected={selected} onSelect={setSelected}
+        localChanges={hasLocalRow ? { count: localChanges.data?.files.length, selected: localSelected, pending: localChanges.isPending, error: localChanges.isError, onSelect: () => { setSelected(LOCAL_CHANGES_ID); if (localChanges.isError) void localChanges.refetch(); } } : undefined}
         canLoadMore={history.hasNextPage && !history.isFetching && !history.isError} onLoadMore={loadMoreHistory} fetchingNextPage={history.isFetchingNextPage} />
       <ResizeHandle className="primary-resizer" axis="vertical" viewer={viewerRef} value={sizes.primary} initial={defaultLayout().sizes[mode].primary} label="Resize commit log" onChange={value => resize("primary", value)} />
       <ResizeHandle className="secondary-resizer" axis={mode === "columns" ? "vertical" : "horizontal"} viewer={viewerRef} offset={mode === "columns" ? sizes.primary : 0} value={sizes.secondary} initial={defaultLayout().sizes[mode].secondary} label={mode === "columns" ? "Resize files and diff" : "Resize upper panes and diff"} onChange={value => resize("secondary", value)} />
-      {detailId ? <CommitView key={detailId} syntaxService={syntaxService} navigationRef={detailNavigationRef} id={detailId} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
+      {localSelected && localChanges.data ? <CommitView key={LOCAL_CHANGES_ID} syntaxService={syntaxService} navigationRef={detailNavigationRef} id={LOCAL_CHANGES_ID}
+        local={{ changes: localChanges.data, scope: localScope, onScopeChange: setLocalScope, refreshing: localChanges.isFetching, onRefresh: () => void localChanges.refetch() }}
+        diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} />
+      : localSelected ? <><section className="files-panel" aria-label="Local changes">{localChanges.isError ? <Failure error={localChanges.error} retry={() => void localChanges.refetch()} /> : <p className="empty-hint" role="status">Loading local changes…</p>}</section><section className="diff-panel" aria-label="File diff" /></>
+      : detailId ? <CommitView key={detailId} syntaxService={syntaxService} navigationRef={detailNavigationRef} id={detailId} diffMode={diffMode} onDiffModeChange={setDiffMode} filesMode={filesMode} onFilesModeChange={setFilesMode} wrap={wrap} onWrapChange={setWrap} focusedPane={focusedPane} onPaneFocus={setFocusedPane} /> : <>
         <section className="files-panel" aria-label="Commit details and changed files" aria-busy={selected !== null}>{!selected && <><div className="panel-heading"><h2>Commit details</h2></div><p className="empty-hint">Select a commit to inspect its changed files.</p></>}</section>
         <section className="diff-panel" aria-label="File diff" aria-busy={selected !== null}>{!selected && <><div className="panel-heading"><h2>File diff</h2></div><div className="empty-state"><span className="brand-mark empty-icon" aria-hidden="true">G</span><h3>Explore your repository</h3><p>Select a commit from the log to inspect its<br />changed files and diffs.</p></div></>}</section>
       </>}

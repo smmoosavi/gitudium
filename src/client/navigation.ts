@@ -73,7 +73,7 @@ export function focusNavigationTarget(viewer: HTMLElement | null, pane: FocusedP
   if (!viewer) return;
   const selector = pane === "commits" ? ".commits button" : ".files button";
   const target = pane === "diff" ? viewer.querySelector<HTMLElement>(".diff-content")
-    : index === undefined ? viewer.querySelector<HTMLElement>(`${selector}[aria-pressed="true"]`)
+    : index === undefined ? viewer.querySelector<HTMLElement>(`${selector}[aria-pressed="true"]`) ?? (pane === "commits" ? viewer.querySelector<HTMLElement>('.local-changes-row[aria-pressed="true"]') : null)
     : pane === "commits" ? viewer.querySelector<HTMLElement>(`${selector}[data-commit-index="${index}"]`)
     : viewer.querySelectorAll<HTMLElement>(selector)[index];
   if (!target) return;

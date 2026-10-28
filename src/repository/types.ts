@@ -65,6 +65,24 @@ export interface ChangedFile {
   deletions?: number | null;
 }
 
+export type LocalScope = "all" | "staged" | "unstaged" | "untracked";
+
+export interface LocalChangedFile extends ChangedFile {
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+  stagedStatus: ChangedFile["status"] | null;
+  unstagedStatus: ChangedFile["status"] | null;
+}
+
+export interface LocalChanges {
+  available: boolean;
+  head: string | null;
+  version: string;
+  files: LocalChangedFile[];
+}
+
 export interface CommitDetails extends CommitSummary {
   committer: { name: string; email: string; date: string };
   message: string;
@@ -95,6 +113,9 @@ export type SourceResult =
   | { state: "unavailable" };
 
 export interface RepositoryReader {
+  localChanges(signal?: AbortSignal): Promise<LocalChanges>;
+  localDiff(scope: LocalScope, path: string, signal?: AbortSignal, whitespace?: WhitespaceMode, algorithm?: GitDiffAlgorithm): Promise<DiffResult>;
+  localSources(scope: LocalScope, path: string, signal?: AbortSignal): Promise<SourceResult>;
   metadata(signal?: AbortSignal): Promise<RepositoryMetadata>;
   references(signal?: AbortSignal): Promise<Reference[]>;
   history(query?: HistoryQuery, signal?: AbortSignal): Promise<HistoryPage>;

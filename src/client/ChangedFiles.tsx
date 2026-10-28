@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ChangedFile } from "../repository/types";
+import type { ChangedFile, LocalChangedFile } from "../repository/types";
 import { buildFileTree, type FilesMode, type FilesNode } from "./files";
 import { FileChangeSummary } from "./FileChangeSummary";
 
@@ -10,7 +10,7 @@ export function ChangedFiles({ files, mode, selected, onSelect }: {
   const fileButton = (file: ChangedFile, label: string) => <button aria-pressed={selected === file.path} title={file.previousPath ? `${file.previousPath} → ${file.path}` : file.path} onFocus={() => onSelect(file.path)} onClick={() => onSelect(file.path)}>
     <span className={`file-status ${file.status}`} title={file.status}>{file.status === "type-changed" ? "T" : file.status.charAt(0).toUpperCase()}</span>
     <code>{file.previousPath ? <><span className="previous-path">{file.previousPath}</span> → {label}</> : label}</code>
-    <span className="file-metadata"><span className="file-kind">{file.status}</span><FileChangeSummary file={file} /></span>
+    <span className="file-metadata"><span className="file-kind">{file.status}</span>{"staged" in file && <LocalFileBadges file={file as LocalChangedFile} />}<FileChangeSummary file={file} /></span>
   </button>;
   const renderNodes = (nodes: FilesNode[]) => <ul>{nodes.map(node => <li key={node.path}>
     {"children" in node ? <details open><summary title={node.path}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z" /></svg><code>{node.name}</code></summary>{renderNodes(node.children)}</details>
@@ -19,4 +19,12 @@ export function ChangedFiles({ files, mode, selected, onSelect }: {
   return mode === "list"
     ? <ul className="files" aria-label="Changed files list">{files.map(file => <li key={file.path}>{fileButton(file, file.path)}</li>)}</ul>
     : <div className="files file-tree" aria-label="Changed files tree">{renderNodes(tree)}</div>;
+}
+
+function LocalFileBadges({ file }: { file: LocalChangedFile }) {
+  return <>{file.conflicted ? <span className="local-badge conflicted">Conflict</span> : <>
+    {file.staged && <span className="local-badge staged">Staged</span>}
+    {file.unstaged && <span className="local-badge unstaged">Unstaged</span>}
+    {file.untracked && <span className="local-badge untracked">Untracked</span>}
+  </>}</>;
 }

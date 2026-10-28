@@ -10,6 +10,7 @@ const revision = z.string().min(1).max(1024).refine(isRevision, "Expected a non-
 const snapshotId = z.string().regex(/^[a-f0-9]{64}$/);
 // Only the API caps path length; direct reader calls retain literal-path validation without a length cap.
 const path = z.string().min(1).max(8192).refine(isLiteralPath, "Expected a repository-relative path.");
+const localScope = z.enum(["all", "staged", "unstaged", "untracked"]);
 
 const repositoryProcedure = t.procedure.use(async ({ ctx, next }) =>
   next({ ctx: { reader: await read(ctx.reader) } }),
@@ -31,6 +32,13 @@ async function read<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export const appRouter = t.router({
+  localChanges: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.localChanges(signal))),
+  localDiff: repositoryProcedure.input(z.object({
+    scope: localScope, path,
+    algorithm: z.enum(["myers", "histogram", "patience", "minimal"]).default("myers"),
+    whitespace: z.enum(["none", "trailing", "all", "all-and-blank-lines"]).default("none"),
+  })).query(({ ctx, input, signal }) => read(() => ctx.reader.localDiff(input.scope, input.path, signal, input.whitespace, input.algorithm))),
+  localSources: repositoryProcedure.input(z.object({ scope: localScope, path })).query(({ ctx, input, signal }) => read(() => ctx.reader.localSources(input.scope, input.path, signal))),
   metadata: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.metadata(signal))),
   references: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.references(signal))),
   history: repositoryProcedure.input(z.object({
