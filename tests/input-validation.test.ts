@@ -39,13 +39,13 @@ test("diff API defaults whitespace to none, forwards modes and rejects invalid v
   } as RepositoryReader;
   const api = appRouter.createCaller({ reader: async () => reader });
   await api.diff({ revision: "HEAD" });
-  expect(calls.pop()).toEqual(["HEAD", undefined, undefined, "none"]);
+  expect(calls.pop()).toEqual(["HEAD", undefined, undefined, "none", "myers"]);
   await api.diff({ revision: "HEAD", whitespace: undefined });
-  expect(calls.pop()).toEqual(["HEAD", undefined, undefined, "none"]);
+  expect(calls.pop()).toEqual(["HEAD", undefined, undefined, "none", "myers"]);
   const modes: WhitespaceMode[] = ["none", "trailing", "all", "all-and-blank-lines"];
   for (const whitespace of modes) {
     await api.diff({ revision: "HEAD", path: "file", whitespace });
-    expect(calls.pop()).toEqual(["HEAD", "file", undefined, whitespace]);
+    expect(calls.pop()).toEqual(["HEAD", "file", undefined, whitespace, "myers"]);
   }
   for (const whitespace of ["", "ignore", "ALL", "--ignore-all-space", null, 123, true, [], {}]) {
     await expect(api.diff({ revision: "HEAD", whitespace: whitespace as WhitespaceMode })).rejects.toMatchObject({ code: "BAD_REQUEST" });
