@@ -32,12 +32,56 @@ test("references do not bend a linear history, and important tips extend upward"
   expect(fork.rows.map(row => row.lane)).toEqual([0, 1, 0]);
 });
 
-test("side branches join the parent lane immediately below their oldest unique commit", () => {
+test("side branches join below the last intervening parent-spine node", () => {
   const graph = layoutCommitGraph([commit("f", ["r"]), commit("m", ["m1"], ["refs/heads/main"]), commit("m1", ["r"]), commit("r")]);
   expect(graph.rows.map(row => row.lane)).toEqual([1, 0, 0, 0]);
-  expect(graph.rows[0]!.outgoing[0]!.to).toBe(0);
-  expect(graph.rows[1]!.above).toEqual([0]);
+  expect(graph.rows[0]!.outgoing[0]!.to).toBe(1);
+  expect(graph.rows[1]!.above).toEqual([1]);
+  expect(graph.rows[2]!.above).toEqual([1, 0]);
+  expect(graph.rows[2]!.outgoing).toContainEqual({ from: 1, to: 0 });
+  expect(graph.rows[3]!.above).toEqual([0]);
+});
+
+test("safe side connections join immediately and release their lane", () => {
+  const graph = layoutCommitGraph([
+    commit("m", ["r"], ["refs/heads/main"]), commit("f", ["r"]),
+    commit("x", ["xr"]), commit("xr"), commit("r"),
+  ]);
+  expect(graph.width).toBe(2);
+  expect(graph.rows[1]!.outgoing).toEqual([{ from: 1, to: 0 }]);
+  expect(graph.rows[2]!.lane).toBe(1);
   expect(graph.rows[2]!.above).toEqual([0]);
+});
+
+test("blocked side connections release their lane before a distant parent", () => {
+  const graph = layoutCommitGraph([
+    commit("f", ["r"]), commit("m", ["a"], ["refs/heads/main"]),
+    commit("a", ["r"]), commit("x", ["xr"]), commit("xr"), commit("r"),
+  ]);
+  expect(graph.width).toBe(2);
+  expect(graph.rows[0]!.outgoing).toEqual([{ from: 1, to: 1 }]);
+  expect(graph.rows[2]!.above).toEqual([1, 0]);
+  expect(graph.rows[2]!.outgoing).toContainEqual({ from: 1, to: 0 });
+  expect(graph.rows[3]!.lane).toBe(1);
+  expect(graph.rows[3]!.above).toEqual([0]);
+  expect(graph.rows[5]!.above).toEqual([0]);
+});
+
+test("README and HEAD branches meet only at their shared base", () => {
+  const graph = layoutCommitGraph([
+    commit("46324b3", ["83dbdee"], ["refs/heads/t3/improve-user-readme"]),
+    commit("83dbdee", ["cfc68e0"]),
+    commit("cfc68e0", ["e02d6f0"]),
+    commit("5ce8a37", ["e02d6f0"], ["refs/heads/local-diff"]),
+    commit("e02d6f0", ["e2a8b1f"]),
+    commit("e2a8b1f"),
+  ], "5ce8a37");
+  expect(graph.rows.map(row => row.lane)).toEqual([1, 1, 1, 0, 0, 0]);
+  expect(graph.rows[2]!.outgoing).toEqual([{ from: 1, to: 1 }]);
+  expect(graph.rows[3]!.above).toEqual([1]);
+  expect(graph.rows[3]!.below).toEqual([]);
+  expect(graph.rows[3]!.outgoing).toContainEqual({ from: 1, to: 0 });
+  expect(graph.rows[4]!.above).toEqual([0]);
 });
 
 test("merges connect every parent while preserving the first-parent spine", () => {
@@ -60,7 +104,7 @@ test("overlapping disconnected histories do not cross", () => {
   expect(graph.rows.map(row => row.lane)).toEqual([0, 1, 0, 1]);
 });
 
-test("many sequential side branches reuse one column", () => {
+test("many sequential side branches reuse one side column without false junctions", () => {
   const commits: CommitSummary[] = [];
   for (let index = 0; index < 100; index++) {
     commits.push(commit(`f${index}`, [`m${index + 1}`]));
@@ -70,6 +114,10 @@ test("many sequential side branches reuse one column", () => {
   const graph = layoutCommitGraph(commits);
   expect(graph.width).toBe(2);
   expect(graph.rows.filter(row => row.id.startsWith("m")).every(row => row.lane === 0)).toBe(true);
+  for (let index = 0; index < 100; index++) {
+    expect(graph.rows[index * 2 + 1]!.above).toContain(1);
+    expect(graph.rows[index * 2 + 1]!.outgoing).toContainEqual({ from: 1, to: 0 });
+  }
 });
 
 test("a newly loaded priority spine can shift lanes when the original page has no branch evidence", () => {
@@ -86,5 +134,7 @@ test("page boundaries stay open and appending history preserves existing lanes",
     const after = layoutCommitGraph(commits, null, before);
     expect(after.rows.slice(0, count).map(row => row.lane)).toEqual(before.rows.map(row => row.lane));
     expect(before.rows[0]!.root).toBe(false);
+    expect(before.rows[0]!.outgoing).toEqual([{ from: 1, to: 1 }]);
+    expect(before.rows[1]!.above).toEqual([1]);
   }
 });

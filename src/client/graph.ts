@@ -75,6 +75,24 @@ export function layoutCommitGraph(commits: CommitSummary[], head: string | null 
     const target = tracks[parentOwner(id)]!;
     target.start = Math.min(target.start, index + 1);
   }));
+  // Join the parent lane immediately unless intervening nodes would become
+  // false junctions. In that case, join just after the last such node.
+  const firstParentJoins = commits.map((commit, index) => {
+    const id = commit.parents[0];
+    if (id === undefined || owners[index] === parentOwner(id)) return index;
+    const end = indexes.get(id) ?? commits.length;
+    const nodes = tracks[parentOwner(id)]!.nodes;
+    let low = 0;
+    let high = nodes.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (nodes[middle]! < end) low = middle + 1; else high = middle;
+    }
+    const obstacle = nodes[low - 1];
+    const join = obstacle !== undefined && obstacle > index ? obstacle : index;
+    tracks[owners[index]!]!.end = Math.max(tracks[owners[index]!]!.end, join);
+    return join;
+  });
   const occupied: Track[][] = [];
   const allocating = new Set<number>();
   const allocate = (owner: number): number => {
@@ -102,12 +120,24 @@ export function layoutCommitGraph(commits: CommitSummary[], head: string | null 
   }));
   const starts: number[][] = commits.map(() => []);
   const stops: number[][] = commits.map(() => []);
-  commits.forEach((commit, index) => commit.parents.forEach(id => {
+  commits.forEach((commit, index) => commit.parents.forEach((id, parentIndex) => {
     const end = indexes.get(id) ?? commits.length;
-    const lane = tracks[parentOwner(id)]!.lane;
-    rows[index]!.outgoing.push({ from: rows[index]!.lane, to: lane });
+    const target = tracks[parentOwner(id)]!.lane;
+    const from = rows[index]!.lane;
+    const join = parentIndex === 0 ? firstParentJoins[index]! : index;
+    const delayed = join > index && from !== target;
+    const lane = delayed ? from : target;
+    rows[index]!.outgoing.push({ from, to: lane });
+    if (delayed) {
+      rows[join]!.outgoing.push({ from, to: target });
+      if (join + 1 < commits.length) {
+        starts[join + 1]!.push(target);
+        if (end < commits.length) stops[end]!.push(target);
+      }
+    }
     if (index + 1 < commits.length) starts[index + 1]!.push(lane);
-    if (end < commits.length) stops[end]!.push(lane);
+    const stop = delayed ? join : end;
+    if (stop < commits.length) stops[stop]!.push(lane);
   }));
   const active = new Map<number, number>();
   rows.forEach((row, index) => {
