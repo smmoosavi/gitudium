@@ -3,7 +3,7 @@ import { buildTracks } from "./graphTopology";
 import { drawingRows } from "./graphGeometry";
 import type { CommitSummary } from "../repository/types";
 
-export { referencePriority } from "./graphTopology";
+export { referencePriority } from "./commitTopology";
 
 export interface GraphConnection { childId: string; parentId: string; parentIndex: number; open: boolean }
 export interface GraphSegment { connection: GraphConnection; from: number; to: number; part: "above" | "below" | "turn" }
@@ -15,7 +15,7 @@ export interface GraphRow {
 }
 export interface CommitGraph { rows: GraphRow[]; width: number; priorities: number[] }
 
-// Input is Git's child-before-parent topological order. Display dimensions never
+// Input is child-before-parent topological order. Display dimensions never
 // participate in topology, connection constraints, or lane allocation.
 export function layoutCommitGraph(commits: CommitSummary[], head: string | null = null, previous?: CommitGraph): CommitGraph {
   const topology = buildTracks(commits, head, previous);
