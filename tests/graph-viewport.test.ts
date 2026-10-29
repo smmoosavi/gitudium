@@ -2,8 +2,10 @@ import { expect, test } from "bun:test";
 import { commitRowHeight, graphWidth, graphViewportWidth, graphScrollOffset, visibleGraphLanes } from "../src/client/graphViewport";
 import type { GraphRow } from "../src/client/graph";
 
+const segment = (from: number, to: number, part: "above" | "below" | "turn") => ({ from, to, part, connection: { childId: "a", parentId: "b", parentIndex: 0, open: false } });
+
 const row = (lane: number, extra: Partial<GraphRow> = {}): GraphRow => ({
-  id: String(lane), lane, root: false, above: [], below: [], outgoing: [], ...extra,
+  id: String(lane), lane, root: false, segments: [], ...extra,
 });
 
 test("distant wide history does not reserve graph width", () => {
@@ -13,9 +15,9 @@ test("distant wide history does not reserve graph width", () => {
 });
 
 test("visible graph width includes passing lines and both edge endpoints", () => {
-  expect(visibleGraphLanes([row(0, { above: [7], below: [9], outgoing: [{ from: 12, to: 15 }] })], [0])).toBe(16);
-  expect(visibleGraphLanes([row(0, { above: [7] })], [0])).toBe(8);
-  expect(visibleGraphLanes([row(0, { below: [9] })], [0])).toBe(10);
+  expect(visibleGraphLanes([row(0, { segments: [segment(7, 7, "above"), segment(9, 9, "below"), segment(12, 15, "turn")] })], [0])).toBe(16);
+  expect(visibleGraphLanes([row(0, { segments: [segment(7, 7, "above")] })], [0])).toBe(8);
+  expect(visibleGraphLanes([row(0, { segments: [segment(9, 9, "below")] })], [0])).toBe(10);
   expect(visibleGraphLanes([], [])).toBe(1);
 });
 

@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
-import { layoutCommitGraph, referencePriority } from "../src/client/graph";
+import { layoutCommitGraph as layout, referencePriority, type CommitGraph } from "../src/client/graph";
 import type { CommitSummary } from "../src/repository/types";
+
+// Compact shape assertions are separate from identity-aware topology checks.
+function layoutCommitGraph(commits: CommitSummary[], head: string | null = null, previous?: CommitGraph) {
+  const graph = layout(commits, head, previous);
+  return { ...graph, rows: graph.rows.map(row => ({ ...row,
+    above: [...new Set(row.segments.filter(segment => segment.part === "above").map(segment => segment.from))],
+    below: [...new Set(row.segments.filter(segment => segment.part === "below").map(segment => segment.from))],
+    outgoing: row.segments.filter(segment => segment.part === "turn").map(({ from, to }) => ({ from, to })),
+  })) };
+}
 
 const commit = (id: string, parents: string[] = [], references: string[] = []): CommitSummary => ({
   id, parents, references, shortId: id, subject: id, author: { name: "Test", email: "", date: "" },
