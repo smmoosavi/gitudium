@@ -1,21 +1,25 @@
+import { allocateRoutes } from "./graphRouting";
+import { buildTracks } from "./graphTopology";
+import { drawingRows } from "./graphGeometry";
 import type { CommitSummary } from "../repository/types";
 
-export interface GraphEdge { from: number; to: number }
+export { referencePriority } from "./graphTopology";
+
+export interface GraphConnection { childId: string; parentId: string; parentIndex: number; open: boolean }
+export interface GraphSegment { connection: GraphConnection; from: number; to: number; part: "above" | "below" | "turn" }
 export interface GraphRow {
   id: string;
   lane: number;
   root: boolean;
-  above: number[];
-  below: number[];
-  outgoing: GraphEdge[];
+  segments: GraphSegment[];
 }
 export interface CommitGraph { rows: GraphRow[]; width: number; priorities: number[] }
 
-export function referencePriority(reference: string): number {
-  const name = reference.match(/^refs\/(?:heads\/|remotes\/(?:origin|upstream)\/)([^/]+)$/)?.[1] ?? "";
-  if (["main", "trunk", "mainline", "default", "stable", "master"].includes(name)) return 0;
-  if (["dev", "devel", "develop", "development"].includes(name)) return 1;
-  return reference === "HEAD" ? 2 : 3;
+// Input is Git's child-before-parent topological order. Display dimensions never
+// participate in topology, connection constraints, or lane allocation.
+export function layoutCommitGraph(commits: CommitSummary[], head: string | null = null, previous?: CommitGraph): CommitGraph {
+  const topology = buildTracks(commits, head, previous);
+  const routed = allocateRoutes(commits, topology, previous);
+  const rows = drawingRows(commits, routed);
+  return { rows, width: routed.width, priorities: topology.priorities };
 }
-
-export { layoutCommitGraph } from "./graphRouting";
