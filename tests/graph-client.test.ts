@@ -148,3 +148,13 @@ test("page boundaries stay open and appending history preserves existing lanes",
     expect(before.rows[1]!.above).toEqual([1]);
   }
 });
+
+test("a blocked merge-parent route releases its separate lane after its last obstacle", () => {
+  const graph = layoutCommitGraph([commit("merge", ["a", "root"]), commit("a", ["root"]),
+    commit("standalone"), commit("root")]);
+  expect(graph.width).toBe(2);
+  expect(graph.rows.map(row => row.lane)).toEqual([0, 0, 1, 0]);
+  expect(graph.rows[0]!.outgoing).toEqual([{ from: 0, to: 0 }, { from: 0, to: 1 }]);
+  expect(graph.rows[1]!.outgoing).toContainEqual({ from: 1, to: 0 });
+  expect(graph.rows[2]!.above).toEqual([0]);
+});

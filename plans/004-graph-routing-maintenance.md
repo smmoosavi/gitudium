@@ -1,6 +1,6 @@
 # Commit graph routing and maintenance
 
-Status: Proposed. Implementation is separate from this plan.
+Status: Implemented on `refactor/graph-routing-maintenance`; final validation is recorded below.
 
 ## Goal and governing specification
 
@@ -70,3 +70,19 @@ Extract cohesive graph responsibilities with explicit contracts, rather than mov
 ## Scope limits
 
 No graph library replacement, generic utility framework, pagination redesign, viewport redesign, or application-wide state refactor is required. Update the specification only if an actual product behavior decision is needed; extracting responsibilities must not silently redefine its layout rules.
+
+
+## Implementation record
+
+- `graphTopology.ts` builds relationship indexes, inherited priorities, and first-parent tracks. `graphRouting.ts` computes safe joins and allocates lanes with separate node and passing-connection reservations. Neither stage takes viewport dimensions.
+- Every row segment retains its child ID, parent ID, parent position, and open-endpoint status. Additional merge parents use a separate passing lane when intervening nodes on either spine would otherwise create false junctions; that reservation ends at the safe join.
+- `graphGeometry.ts` owns the complete row drawing plan, SVG path geometry, lane spacing, and occupied bounds. `CommitGraph.tsx` draws the plan directly, and `graphViewport.ts` measures the same segments.
+- Tests retain the reported history and compactness expectations, trace individual connections through deterministic forks and seeded merge DAGs, exercise alternate topological orders and pagination, and check renderer geometry. Mounted coverage exercises clipping, shared keyboard scrolling, stationary text, resizing, and virtualization.
+- The specification remains unchanged. Safe connections still join immediately; blocked connections join below the last unrelated dot rather than reserving a lane to the parent unconditionally.
+
+Validation:
+
+- Targeted graph tests and `pnpm typecheck` pass.
+- `pnpm test`: 265 passing tests. An earlier run concurrent with the production build hit the existing repository-cache test's five-second timeout; the repository file passed independently, and the final full run passed without concurrent build work.
+- `pnpm build` passes, with the dependency's existing tree-sitter externalization and eval warnings.
+- Relevant mounted browser tests (`browser/graph.browser.ts` and `browser/app.browser.ts`): nine passing tests. Playwright's browser CDN denied the download, so validation used system Chromium 156 through a temporary `launchOptions.executablePath` override; the repository configuration is unchanged.

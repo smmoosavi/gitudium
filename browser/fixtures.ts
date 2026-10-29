@@ -15,6 +15,7 @@ const details = (revision: string): CommitDetails => ({
 
 export class RepositoryFixture {
   localChanges: LocalChanges = { available: true, head: id(0), version: "initial", files: [] };
+  historyCommits: CommitSummary[] | null = null;
   localText = "working fixture";
   textSources = false;
   files: CommitDetails["files"] | null = null;
@@ -75,6 +76,7 @@ export class RepositoryFixture {
         commitId: id(name === "main" ? (this.refreshed ? 300 : 0) : 200), symbolicTarget: null,
       } satisfies Reference));
       case "history": {
+        if (this.historyCommits) return { commits: this.historyCommits, nextCursor: null } satisfies HistoryPage;
         if (input?.revision === "refs/heads/feature") return { commits: [summary(200), summary(201)], nextCursor: null } satisfies HistoryPage;
         if (input?.cursor) return { commits: Array.from({ length: 20 }, (_, i) => summary(i + 120)), nextCursor: null } satisfies HistoryPage;
         return {
