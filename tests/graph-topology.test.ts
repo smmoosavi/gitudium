@@ -11,6 +11,8 @@ function checkTopology(commits: CommitSummary[], previous?: CommitGraph) {
   const graph = layoutCommitGraph(commits, null, previous);
   for (const row of graph.rows) {
     for (const segment of row.segments) {
+      expect(segment.from).toBeGreaterThanOrEqual(0);
+      expect(segment.to).toBeLessThan(graph.width);
       const child = commits.find(commit => commit.id === segment.connection.childId)!;
       expect(child.parents[segment.connection.parentIndex]).toBe(segment.connection.parentId);
     }
@@ -20,6 +22,9 @@ function checkTopology(commits: CommitSummary[], previous?: CommitGraph) {
     const end = endIndex < 0 ? commits.length : endIndex;
     const segments = (index: number) => graph.rows[index]!.segments.filter(segment =>
       segment.connection.childId === child.id && segment.connection.parentIndex === position);
+    expect(graph.rows.flatMap(row => row.segments).filter(segment =>
+      segment.connection.childId === child.id && segment.connection.parentIndex === position))
+      .toHaveLength(2 * (end - start) - (endIndex < 0 ? 1 : 0));
     const first = segments(start);
     expect(first).toHaveLength(1);
     expect(first[0]!.connection).toMatchObject({ childId: child.id, parentId: parent, parentIndex: position, open: endIndex < 0 });
@@ -31,6 +36,7 @@ function checkTopology(commits: CommitSummary[], previous?: CommitGraph) {
       const above = parts.find(segment => segment.part === "above")!;
       const below = parts.find(segment => segment.part !== "above")!;
       expect(above.from).toBe(lane);
+      expect(above.to).toBe(lane);
       expect(graph.rows[index]!.lane).not.toBe(lane);
       expect(below.from).toBe(lane);
       lane = below.to;
@@ -77,7 +83,10 @@ test("merge routes skip unrelated nodes on both the target and source spines", (
 
 test("small seeded DAGs preserve every merge relationship across pages and orders", () => {
   let seed = 1729;
-  const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed >>> 8;
+  };
   for (let sample = 0; sample < 80; sample++) {
     const commits = Array.from({ length: 9 }, (_, index) => {
       const parents = Array.from({ length: 8 - index }, (_, offset) => index + offset + 1)
