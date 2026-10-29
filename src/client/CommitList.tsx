@@ -23,7 +23,7 @@ export const CommitList = forwardRef<CommitListHandle, {
   const graph = useMemo(() => layoutCommitGraph(commits, head, previousGraph.current), [commits, head]);
   useLayoutEffect(() => { previousGraph.current = graph; }, [graph]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<number | null>(null);
+  const pendingFocus = useRef<string | null>(null);
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => scrollRef.current,
@@ -62,7 +62,7 @@ export const CommitList = forwardRef<CommitListHandle, {
   }, [offset, scrollOffset]);
   const focusPending = () => {
     if (pendingFocus.current === null) return;
-    const button = scrollRef.current?.querySelector<HTMLButtonElement>(`button[data-commit-index="${pendingFocus.current}"]`);
+    const button = scrollRef.current?.querySelector<HTMLButtonElement>(`button[data-commit-id="${pendingFocus.current}"]`);
     if (button) {
       button.focus({ preventScroll: true });
       pendingFocus.current = null;
@@ -74,7 +74,7 @@ export const CommitList = forwardRef<CommitListHandle, {
         if (focus) scrollRef.current?.focus({ preventScroll: true });
         return;
       }
-      pendingFocus.current = focus ? index : null;
+      pendingFocus.current = focus ? commits[index]!.id : null;
       virtualizer.scrollToIndex(index, { align: "auto" });
       focusPending();
     },
@@ -120,7 +120,7 @@ export const CommitList = forwardRef<CommitListHandle, {
         return <li key={item.key} data-index={item.index}
           aria-posinset={item.index + 1} aria-setsize={commits.length}
           style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${item.start}px)` }}>
-          <button data-commit-index={item.index} aria-pressed={selected === commit.id}
+          <button data-commit-id={commit.id} data-commit-index={item.index} aria-pressed={selected === commit.id}
             onFocus={() => onSelect(commit.id)} onClick={() => onSelect(commit.id)}>
             <span className="commit-graph-window"><CommitGraph row={graph.rows[item.index]!} width={lanes} /></span>
             {commit.parents.length === 0 && <span className="sr-only">Root commit. </span>}

@@ -13,6 +13,12 @@ Arrange overlapping branch histories from left to right:
 
 Recognize main and development names under `refs/heads/`, `refs/remotes/origin/`, and `refs/remotes/upstream/`.
 
+### History ordering
+
+- Order independent commits by branch priority, keeping every child above all its parents, including merge parents. Preserve Git's order when priorities tie; commit dates do not override topology or branch priority.
+- Apply ordering within each loaded history page and propagate first-parent priorities across pages. Preserve loaded page boundaries so appending history does not reshuffle existing rows; an independent tip may remain above a higher-priority continuation in a later page.
+- Use the same display order for graph rows, commit text, selection, and keyboard navigation. Viewport width and horizontal scrolling must not affect it.
+
 ### Visual layout rules
 
 - **Prefer straight lines.** Continue vertically whenever possible; a branch label or reference alone should not cause a bend.
