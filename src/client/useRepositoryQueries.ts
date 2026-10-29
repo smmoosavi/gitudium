@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { HistoryCursor } from "../repository/types";
 import { HISTORY_CHUNK_SIZE } from "../repository/limits";
+import { orderHistoryPages } from "./historyOrder";
 import { nextHistoryCursor } from "./history";
 import { api } from "./api";
 
@@ -13,7 +14,8 @@ export function useRepositoryQueries(revision: string, exclude = "") {
     queryFn: ({ pageParam, signal }) => api.history.query({ revision: pageParam ? undefined : revision || undefined, exclude: pageParam ? undefined : exclude || undefined, limit: HISTORY_CHUNK_SIZE, cursor: pageParam }, { signal }),
     getNextPageParam: nextHistoryCursor, retry: false,
   });
-  const commits = useMemo(() => history.data?.pages.flatMap(page => page.commits) ?? [], [history.data]);
+  // Cache pages and cursors retain Git's order; every UI consumer shares this display order.
+  const commits = useMemo(() => orderHistoryPages(history.data?.pages ?? [], metadata.data?.head ?? null), [history.data, metadata.data?.head]);
   const loadMoreHistory = useCallback(() => { void history.fetchNextPage(); }, [history.fetchNextPage]);
   return { metadata, references, history, commits, loadMoreHistory };
 }
