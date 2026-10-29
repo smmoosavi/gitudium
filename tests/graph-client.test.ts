@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
-import { layoutCommitGraph, referencePriority } from "../src/client/graph";
+import { layoutCommitGraph as layout, referencePriority, type CommitGraph } from "../src/client/graph";
 import type { CommitSummary } from "../src/repository/types";
+
+// Compact shape assertions are separate from identity-aware topology checks.
+function layoutCommitGraph(commits: CommitSummary[], head: string | null = null, previous?: CommitGraph) {
+  const graph = layout(commits, head, previous);
+  return { ...graph, rows: graph.rows.map(row => ({ ...row,
+    above: [...new Set(row.segments.filter(segment => segment.part === "above").map(segment => segment.from))],
+    below: [...new Set(row.segments.filter(segment => segment.part === "below").map(segment => segment.from))],
+    outgoing: row.segments.filter(segment => segment.part === "turn").map(({ from, to }) => ({ from, to })),
+  })) };
+}
 
 const commit = (id: string, parents: string[] = [], references: string[] = []): CommitSummary => ({
   id, parents, references, shortId: id, subject: id, author: { name: "Test", email: "", date: "" },
@@ -137,4 +147,14 @@ test("page boundaries stay open and appending history preserves existing lanes",
     expect(before.rows[0]!.outgoing).toEqual([{ from: 1, to: 1 }]);
     expect(before.rows[1]!.above).toEqual([1]);
   }
+});
+
+test("a blocked merge-parent route releases its separate lane after its last obstacle", () => {
+  const graph = layoutCommitGraph([commit("merge", ["a", "root"]), commit("a", ["root"]),
+    commit("standalone"), commit("root")]);
+  expect(graph.width).toBe(2);
+  expect(graph.rows.map(row => row.lane)).toEqual([0, 0, 1, 0]);
+  expect(graph.rows[0]!.outgoing).toEqual([{ from: 0, to: 0 }, { from: 0, to: 1 }]);
+  expect(graph.rows[1]!.outgoing).toContainEqual({ from: 1, to: 0 });
+  expect(graph.rows[2]!.above).toEqual([0]);
 });

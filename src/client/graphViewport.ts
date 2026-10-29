@@ -1,7 +1,7 @@
+import { occupiedLanes, graphWidth } from "./graphGeometry";
 import type { GraphRow } from "./graph";
 
-export const graphLaneWidth = 16;
-export const graphWidth = (lanes: number) => lanes * graphLaneWidth + 16;
+export { graphLaneWidth, graphWidth } from "./graphGeometry";
 export const commitRowHeight = 100;
 
 export function visibleGraphLanes(rows: GraphRow[], indexes: number[]): number {
@@ -9,10 +9,7 @@ export function visibleGraphLanes(rows: GraphRow[], indexes: number[]): number {
   for (const index of indexes) {
     const row = rows[index];
     if (!row) continue;
-    maximum = Math.max(maximum, row.lane);
-    for (const lane of row.above) maximum = Math.max(maximum, lane);
-    for (const lane of row.below) maximum = Math.max(maximum, lane);
-    for (const edge of row.outgoing) maximum = Math.max(maximum, edge.from, edge.to);
+    maximum = Math.max(maximum, occupiedLanes(row) - 1);
   }
   return maximum + 1;
 }

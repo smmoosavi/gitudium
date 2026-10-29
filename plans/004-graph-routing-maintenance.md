@@ -1,6 +1,6 @@
 # Commit graph routing and maintenance
 
-Status: Proposed. Implementation is separate from this plan.
+Status: Implemented on `refactor/graph-routing-maintenance`; final validation is recorded below.
 
 ## Goal and governing specification
 
@@ -70,3 +70,37 @@ Extract cohesive graph responsibilities with explicit contracts, rather than mov
 ## Scope limits
 
 No graph library replacement, generic utility framework, pagination redesign, viewport redesign, or application-wide state refactor is required. Update the specification only if an actual product behavior decision is needed; extracting responsibilities must not silently redefine its layout rules.
+
+
+## Implementation record
+
+- `graphTopology.ts` builds relationship indexes, inherited priorities, and first-parent tracks. `graphRouting.ts` computes safe joins and allocates lanes with separate node and passing-connection reservations. Neither stage takes viewport dimensions.
+- Every row segment retains its child ID, parent ID, parent position, and open-endpoint status. Additional merge parents use a separate passing lane when intervening nodes on either spine would otherwise create false junctions; that reservation ends at the safe join.
+- `graphGeometry.ts` owns the complete row drawing plan, SVG path geometry, lane spacing, and occupied bounds. `CommitGraph.tsx` draws the plan directly, and `graphViewport.ts` measures the same segments.
+- Tests retain the reported history and compactness expectations, trace individual connections through deterministic forks and seeded merge DAGs, exercise alternate topological orders and pagination, and check renderer geometry. Mounted coverage exercises clipping, shared keyboard scrolling, stationary text, resizing, and virtualization.
+- Safe connections still join immediately; blocked connections join below the last unrelated dot rather than reserving a lane to the parent unconditionally. The subsequent approved history-ordering change is described below.
+
+Validation:
+
+- Targeted graph tests and `pnpm typecheck` pass.
+- `pnpm test`: 265 passing tests. An earlier run concurrent with the production build hit the existing repository-cache test's five-second timeout; the repository file passed independently, and the final full run passed without concurrent build work.
+- `pnpm build` passes, with the dependency's existing tree-sitter externalization and eval warnings.
+- Relevant mounted browser tests (`browser/graph.browser.ts` and `browser/app.browser.ts`): nine passing tests. Playwright's browser CDN denied the download, so validation used system Chromium 156 through a temporary `launchOptions.executablePath` override; the repository configuration is unchanged.
+
+
+## Priority-aware history ordering follow-up
+
+The `59a73f7` example exposed a separate layout choice: placing an independent tip above the entire HEAD history forced a long side connection. Prefer ordering the HEAD chain first, followed by the independent tip immediately before their shared base. This changes displayed commit order, rather than weakening topology checks or swapping HEAD onto the right.
+
+- `commitTopology.ts` supplies the same first-parent priority rules to history ordering and graph tracks. `historyOrder.ts` uses a priority queue of commits whose loaded children have all been emitted; every merge parent must wait for every child. Equal priorities retain Git's source order.
+- Ordering runs at the repository-query presentation boundary. Query-cache pages and cursor offsets remain in Git order, while graph rows, text, virtualization, selection, and keyboard navigation receive one canonical display order.
+- First-parent priorities propagate across pages, but ordering respects immutable loaded page boundaries. Appending history preserves the displayed prefix; an earlier-page side tip can therefore remain above a higher-priority continuation loaded on a later page. A new snapshot or HEAD change recomputes ordering.
+- Pending focus follows commit IDs. Selection is revealed at its new index while navigating history, without moving history scroll position when another pane is active.
+- The graph specification now explicitly documents this approved ordering policy. Regression coverage includes the reported layout, merge DAGs, open endpoints, page-prefix and lane stability, keyboard navigation, HEAD changes, and live updates.
+
+Follow-up validation:
+
+- Targeted ordering and graph tests pass, including the reported HEAD-spine layout and seeded DAG checks after ordering and pagination.
+- `pnpm test --timeout 20000`: 272 passing tests. The default-timeout run again hit the existing repository-cache test's five-second limit; the full run passed with a longer command-line timeout, without changing repository tests.
+- All 11 relevant browser tests pass with system Chromium, including ordering, HEAD changes, focus/selection identity, page appends, and the existing history interaction tests. The live-refresh fixture now models an actual main-branch advance, moving its reference to the new descendant.
+- `pnpm typecheck` and `pnpm build` pass.

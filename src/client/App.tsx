@@ -67,9 +67,12 @@ export function App() {
     focusReferences: () => historyRef.current?.querySelector<HTMLInputElement>("#reference")?.focus(),
   });
   useEffect(() => {
+    // Refreshes can move the selected ID to a different row. Follow it while
+    // navigating history without scrolling history when another pane is active.
+    if (focusedPane !== "commits") return;
     const index = localSelected ? 0 : selectedCommitIndex < 0 ? -1 : selectedCommitIndex + commitOffset;
-    revealHistory(index, focusedPane === "commits" && selected !== null);
-  }, [selected, focusedPane]);
+    revealHistory(index, selected !== null);
+  }, [selected, focusedPane, selectedCommitIndex, hasLocalRow]);
   const repositoryPath = metadata.data?.root ?? metadata.data?.gitDirectory;
   const repositoryName = repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1);
   return <main className="app-shell">

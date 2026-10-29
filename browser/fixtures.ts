@@ -15,6 +15,9 @@ const details = (revision: string): CommitDetails => ({
 
 export class RepositoryFixture {
   localChanges: LocalChanges = { available: true, head: id(0), version: "initial", files: [] };
+  historyCommits: CommitSummary[] | null = null;
+  historyPages: HistoryPage[] | null = null;
+  head: string | null | undefined;
   localText = "working fixture";
   textSources = false;
   files: CommitDetails["files"] | null = null;
@@ -67,7 +70,7 @@ export class RepositoryFixture {
       case "localSources": return { state: "text", before: { revision: "before", path: input!.path, text: `${input!.scope === "unstaged" ? "staged fixture" : "head fixture"}\n` }, after: { revision: this.localChanges.version, path: input!.path, text: `${input!.scope === "staged" ? "staged fixture" : this.localText}\n` } };
       case "metadata": return {
         root: "/fixtures/workspace", gitDirectory: "/fixtures/workspace/.git", commonDirectory: "/fixtures/workspace/.git",
-        bare: false, head: id(this.refreshed ? 300 : 0), branch: "main", objectFormat: "sha1",
+        bare: false, head: this.head === undefined ? id(this.refreshed ? 300 : 0) : this.head, branch: "main", objectFormat: "sha1",
         capabilities: { history: true, firstParentDiffs: true },
       } satisfies RepositoryMetadata;
       case "references": return ["main", "feature"].map(name => ({
@@ -75,12 +78,24 @@ export class RepositoryFixture {
         commitId: id(name === "main" ? (this.refreshed ? 300 : 0) : 200), symbolicTarget: null,
       } satisfies Reference));
       case "history": {
+        if (this.historyPages) {
+          const offset = (input?.cursor as { offset: number } | undefined)?.offset ?? 0;
+          let start = 0;
+          for (const page of this.historyPages) {
+            if (start === offset) return page;
+            start += page.commits.length;
+          }
+          throw new Error(`Unknown fixture history offset: ${offset}`);
+        }
+        if (this.historyCommits) return { commits: this.historyCommits, nextCursor: null } satisfies HistoryPage;
         if (input?.revision === "refs/heads/feature") return { commits: [summary(200), summary(201)], nextCursor: null } satisfies HistoryPage;
         if (input?.cursor) return { commits: Array.from({ length: 20 }, (_, i) => summary(i + 120)), nextCursor: null } satisfies HistoryPage;
-        return {
-          commits: [...(this.refreshed ? [summary(300)] : []), ...Array.from({ length: 120 }, (_, i) => summary(i))],
-          nextCursor: { snapshot: "fixture-snapshot", offset: 120 },
-        } satisfies HistoryPage;
+        const commits = Array.from({ length: 120 }, (_, i) => summary(i));
+        if (this.refreshed) {
+          commits[0]!.references = [];
+          commits.unshift({ ...summary(300), parents: [id(0)], references: ["refs/heads/main"] });
+        }
+        return { commits, nextCursor: { snapshot: "fixture-snapshot", offset: 120 } } satisfies HistoryPage;
       }
       case "commit": {
         const commit = details(input!.revision as string);
