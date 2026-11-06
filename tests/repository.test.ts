@@ -317,6 +317,45 @@ test("history snapshots are reused and evicted least recently used with a bounde
   expect((await reader.history({ cursor: cursors[0], limit: 1 })).commits[0].id).toBe(root);
 });
 
+test("history discovers branch bases before paginating and loads summaries only for the requested slice", async () => {
+  const path = await fixture();
+  const base115 = await commit(path, "root", "root", "base 1.15");
+  const tree = await git(path, "rev-parse", "HEAD^{tree}");
+  const base116 = await git(path, "commit-tree", tree, "-p", base115, "-m", "base 1.16");
+  const main = await git(path, "commit-tree", tree, "-p", base116, "-m", "main");
+  const fix115old = await git(path, "commit-tree", tree, "-p", base115, "-m", "old 1.15 fix");
+  const fix115new = await git(path, "commit-tree", tree, "-p", fix115old, "-m", "recent 1.15 fix");
+  const fix116 = await git(path, "commit-tree", tree, "-p", base116, "-m", "recent 1.16 fix");
+  await git(path, "update-ref", "refs/heads/main", main);
+  await git(path, "update-ref", "refs/heads/hot-fix/1.15", fix115new);
+  await git(path, "update-ref", "refs/heads/hot-fix/1.16", fix116);
+  const reader = await GitRepositoryReader.discover(path);
+  const internal = reader as unknown as { run: (...args: [string[], AbortSignal?, number?, string?]) => Promise<string> };
+  const run = internal.run.bind(reader);
+  const commands: { args: string[]; input?: string }[] = [];
+  internal.run = (...args) => { commands.push({ args: args[0], input: args[3] }); return run(...args); };
+  const first = await reader.history({ limit: 2 });
+  expect(first.commits.map(commit => commit.id)).toEqual([main, fix116]);
+  expect(commands.filter(command => command.args.includes("--format=%H%x00%P"))).toHaveLength(1);
+  expect(commands.filter(command => command.args.includes("--no-walk=unsorted")).map(command => command.input))
+    .toEqual([`${main}\n${fix116}\n`]);
+  await git(path, "update-ref", "-d", "refs/heads/hot-fix/1.15");
+  await git(path, "update-ref", "refs/heads/main", fix116);
+  const remaining: string[] = [];
+  let cursor = first.nextCursor;
+  while (cursor) {
+    const page = await reader.history({ cursor, limit: 1 });
+    remaining.push(...page.commits.map(commit => commit.id));
+    if (page.commits[0]?.id === fix115new) expect(page.commits[0].references).toContain("refs/heads/hot-fix/1.15");
+    cursor = page.nextCursor;
+  }
+  expect(remaining).toEqual([base116, fix115new, fix115old, base115]);
+  expect(commands.filter(command => command.args.includes("--format=%H%x00%P"))).toHaveLength(1);
+  const refreshed = await reader.history({ limit: 2 });
+  expect(refreshed.commits[0]!.id).toBe(fix116);
+  expect(refreshed.nextCursor!.snapshot).not.toBe(first.nextCursor!.snapshot);
+});
+
 test("root commits, unusual literal paths, binary and oversized diffs", async () => {
   const path = await fixture();
   const name = "-odd\tline\n☃.txt";
@@ -475,8 +514,9 @@ test("bulk history peeling matches individual resolution for mixed and nested re
   const commands: string[] = [];
   internal.run = (...args) => { commands.push(args[0][0]); return run(...args); };
   const page = await reader.history({ limit: 200 });
-  expect(commands).toEqual(["rev-parse", "cat-file", "rev-parse", "for-each-ref", "log"]);
-  expect(page.commits.map(item => item.id)).toEqual(expected);
+  expect(commands).toEqual(["rev-parse", "cat-file", "rev-parse", "for-each-ref", "rev-parse", "log", "log"]);
+  expect(page.commits.map(item => item.id).sort()).toEqual(expected.sort());
+  expect(page.commits[0]!.id).toBe(detached);
   expect(page.commits.map(item => item.id).sort()).toEqual([root, custom, detached].sort());
   const references = await reader.references();
   expect(page.commits.find(item => item.id === root)?.references).toEqual(references.filter(ref => ref.commitId === root).map(ref => ref.name));

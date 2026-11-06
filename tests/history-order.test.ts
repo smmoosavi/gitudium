@@ -1,13 +1,13 @@
 import { checkTopology } from "./helpers/graph";
 import { expect, test } from "bun:test";
 import type { CommitSummary } from "../src/repository/types";
-import { orderHistoryPages } from "../src/client/historyOrder";
+import { orderHistory } from "../src/repository/historyOrder";
 import { layoutCommitGraph } from "../src/client/graph";
 
 const commit = (id: string, parents: string[] = [], references: string[] = []): CommitSummary => ({
   id, parents, references, shortId: id, subject: id, author: { name: "Test", email: "", date: "" },
 });
-const order = (commits: CommitSummary[], head: string | null = null) => orderHistoryPages([{ commits }], head);
+const order = orderHistory<CommitSummary>;
 const ids = (commits: CommitSummary[]) => commits.map(commit => commit.id);
 function expectTopological(commits: CommitSummary[]) {
   const indexes = new Map(commits.map((commit, index) => [commit.id, index]));
@@ -56,19 +56,19 @@ test("merge parents wait for every child, even when a parent has higher priority
   expect(ids(commits)).toHaveLength(6);
 });
 
-test("equal priorities retain source order for disconnected roots, merges, and open parents", () => {
+test("equal priorities keep connected histories together, with source-order ties and open parents", () => {
   const commits = [commit("merge", ["a", "missing"]), commit("root"), commit("other", ["a"]), commit("a")];
-  expect(order(commits)).toEqual(commits);
+  expect(ids(order(commits))).toEqual(["merge", "other", "a", "root"]);
   expect(order([])).toEqual([]);
 });
 
-test("appended pages preserve displayed order and lanes while propagating HEAD priority across boundaries", () => {
+test("structural order is computed before pagination and every page preserves its prefix and lanes", () => {
   const source = reported();
-  const pages = [{ commits: source.slice(0, 3) }, { commits: source.slice(3, 5) }, { commits: source.slice(5) }];
+  const ordered = order(source, "3886481");
   let previous = layoutCommitGraph([]);
   let before: CommitSummary[] = [];
-  for (let length = 1; length <= pages.length; length++) {
-    const commits = orderHistoryPages(pages.slice(0, length), "3886481");
+  for (let length = 1; length <= ordered.length; length++) {
+    const commits = ordered.slice(0, length);
     expect(commits.slice(0, before.length)).toEqual(before);
     expectTopological(commits);
     const graph = layoutCommitGraph(commits, "3886481", previous);
@@ -76,7 +76,7 @@ test("appended pages preserve displayed order and lanes while propagating HEAD p
     previous = graph;
     before = commits;
   }
-  expect(ids(before)).toEqual(["3886481", "c7c6b5e", "59a73f7", "abca8b9", "b4721c1", "7a59bd8"]);
+  expect(ids(before)).toEqual(["3886481", "c7c6b5e", "abca8b9", "b4721c1", "59a73f7", "7a59bd8"]);
 });
 
 test("a refreshed snapshot recomputes order when HEAD changes rather than pinning stale priorities", () => {
@@ -94,17 +94,45 @@ test("seeded merge DAGs remain complete, topological, deterministic, and stable 
     source[random() % source.length]!.references = ["refs/heads/main"];
     source[random() % source.length]!.references = ["refs/heads/dev"];
     const head = String(random() % source.length);
-    const pages = Array.from({ length: 3 }, (_, index) => ({ commits: source.slice(index * 10, (index + 1) * 10) }));
+    const ordered = order(source, head);
     let previous: CommitSummary[] = [];
     let previousGraph = layoutCommitGraph([]);
-    for (let count = 1; count <= pages.length; count++) {
-      const commits = orderHistoryPages(pages.slice(0, count), head);
+    for (let count = 1; count <= 3; count++) {
+      const commits = ordered.slice(0, count * 10);
       expectTopological(commits);
       previousGraph = checkTopology(commits, previousGraph, head);
       expect(new Set(ids(commits)).size).toBe(count * 10);
       expect(commits.slice(0, previous.length)).toEqual(previous);
-      expect(commits).toEqual(orderHistoryPages(pages.slice(0, count), head));
+      expect(commits).toEqual(order(source, head).slice(0, count * 10));
       previous = commits;
     }
   }
+});
+
+test("the ci-runner history follows the main continuation and short branches before their older base", () => {
+  const source = [commit("73618c24", ["6eb27737"], ["refs/heads/ci-runner"]),
+    commit("6eb27737", ["0fd82410"]), commit("0fd82410", ["f781bf27"]), commit("f781bf27", ["3e0b2a98"]),
+    commit("90912c4a", ["15046ba6"], ["refs/heads/main"]), commit("15046ba6", ["33ff6d3f"]),
+    commit("513970ce", ["33ff6d3f"], ["refs/heads/update-sessions"]),
+    commit("85f1757e", ["33ff6d3f"], ["refs/heads/d"]), commit("43ca7522", ["33ff6d3f"], ["refs/heads/debug"]),
+    commit("33ff6d3f", ["3e0b2a98"]), commit("3e0b2a98")];
+  const ordered = order(source);
+  expect(ids(ordered)).toEqual(["90912c4a", "15046ba6", "513970ce", "85f1757e", "43ca7522", "33ff6d3f",
+    "73618c24", "6eb27737", "0fd82410", "f781bf27", "3e0b2a98"]);
+  expectTopological(ordered);
+  checkTopology(ordered);
+});
+
+test("recent maintenance commits stay near their divergence points rather than other recent tips", () => {
+  const source = [commit("hotfix-115-new", ["hotfix-115-old"], ["refs/heads/hot-fix/1.15"]),
+    commit("hotfix-116", ["base-116"], ["refs/heads/hot-fix/1.16"]),
+    commit("main", ["base-116"], ["refs/heads/main"]), commit("base-116", ["base-115"]),
+    commit("hotfix-115-old", ["base-115"]), commit("base-115")];
+  expect(ids(order(source))).toEqual(["main", "hotfix-116", "base-116", "hotfix-115-new", "hotfix-115-old", "base-115"]);
+});
+
+test("a hundred thousand commits do not require recursive traversal", () => {
+  const source = Array.from({ length: 100_000 }, (_, index) => commit(String(index), index < 99_999 ? [String(index + 1)] : [],
+    index === 0 ? ["refs/heads/main"] : []));
+  expect(order(source)).toEqual(source);
 });

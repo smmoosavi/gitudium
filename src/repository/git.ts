@@ -8,12 +8,20 @@ import type {
   HistoryQuery, Reference, RepositoryMetadata, RepositoryReader, SourceFile, SourceResult, WhitespaceMode, GitDiffAlgorithm,
 } from "./types";
 
-import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
+import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseTopology, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
+import { orderHistory } from "./historyOrder";
 import { GitRunner, MAX_OUTPUT } from "./runner";
 import { isRevision, isHistoryExpression, isRefExclusions, refExclusionPatterns, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
 const MAX_HISTORY_SNAPSHOTS = 128;
+const MAX_HISTORY_SNAPSHOT_COMMITS = 1_000_000;
+const MAX_TOPOLOGY_OUTPUT = 64 * 1024 * 1024;
+
+interface HistorySnapshot {
+  ids: string[];
+  refs: Map<string, string[]>;
+}
 
 function invalid(message: string): never {
   throw new RepositoryError("INVALID_INPUT", message);
@@ -34,7 +42,7 @@ function validatePath(path: string): void {
 export class GitRepositoryReader implements RepositoryReader {
   private readonly runner: GitRunner;
   private readonly local: LocalChangesReader;
-  private readonly historySnapshots = new Map<string, { tips: string[]; revision: string; exclude: string }>();
+  private readonly historySnapshots = new Map<string, HistorySnapshot>();
 
   private constructor(cwd: string) {
     this.runner = new GitRunner(cwd);
@@ -162,48 +170,65 @@ export class GitRepositoryReader implements RepositoryReader {
     const limit = query.limit ?? 50;
     if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_CHUNK_SIZE) invalid(`History limit must be between 1 and ${HISTORY_CHUNK_SIZE}.`);
     if (query.cursor && (query.revision !== undefined || query.exclude !== undefined)) invalid("Use either a cursor or revision/exclusion settings, not both.");
-    let tips: string[];
-    let revision = query.revision ?? "";
-    let exclude = query.exclude ?? "";
-    let snapshot: string | undefined;
+    let snapshot: string;
+    let saved: HistorySnapshot;
     let offset = 0;
     if (query.cursor) {
       const cursor = query.cursor;
       if (typeof cursor.snapshot !== "string" || !/^[a-f0-9]{64}$/.test(cursor.snapshot) || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0 || cursor.offset > 1_000_000) invalid("Invalid history cursor.");
       snapshot = cursor.snapshot;
-      const saved = this.historySnapshots.get(snapshot);
-      if (!saved) invalid("History cursor expired; reload history to start a new snapshot.");
-      ({ tips, revision, exclude } = saved);
+      const existing = this.historySnapshots.get(snapshot);
+      if (!existing) invalid("History cursor expired; reload history to start a new snapshot.");
+      saved = existing;
       this.historySnapshots.delete(snapshot);
       this.historySnapshots.set(snapshot, saved);
       offset = cursor.offset;
     } else {
-      tips = await this.historyTips(query.revision === undefined ? "" : query.revision, signal, query.exclude ?? "");
+      const revision = query.revision === undefined ? "" : query.revision;
+      const exclude = query.exclude ?? "";
+      const tips = await this.historyTips(revision, signal, exclude);
+      if (!tips.some(tip => !tip.startsWith("^"))) return { commits: [], nextCursor: null };
+      const exclusions = refExclusionPatterns(exclude).map(pattern => pattern.startsWith("refs/") ? pattern : `refs/heads/${pattern}`);
+      const explicit = revision.split(",").map(term => term.trim()).filter(term => term && term !== "all" && !term.startsWith("!"));
+      const matcher = (pattern: string) => {
+        const glob = new Bun.Glob(pattern);
+        return (name: string) => glob.match(name) || pattern.endsWith("/*") && name.startsWith(pattern.slice(0, -1));
+      };
+      const excludedRefs = exclusions.map(matcher);
+      const selectedRefs = explicit.map(matcher);
+      const refs = referenceNames((await this.references(signal)).filter(ref => {
+        const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
+        return !excludedRefs.some(matches => matches(ref.name)) || selectedRefs.some(matches => matches(ref.name) || matches(shorthand));
+      }));
+      let head: string | null = null;
+      try { head = await this.resolve("HEAD", signal); } catch (error) {
+        if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
+      }
+      const output = await this.run(["log", "--topo-order", "-z", "--format=%H%x00%P", ...tips, "--"], signal, MAX_TOPOLOGY_OUTPUT);
+      const ids = orderHistory(parseTopology(output, refs), head).map(commit => commit.id);
+      if (ids.length > MAX_HISTORY_SNAPSHOT_COMMITS) throw new RepositoryError("OUTPUT_LIMIT", "History topology exceeded the configured commit limit.");
+      snapshot = createHash("sha256").update(JSON.stringify({ tips, revision, exclude, head, refs: [...refs], ids })).digest("hex");
+      saved = this.historySnapshots.get(snapshot) ?? { ids, refs };
     }
-    if (!tips.some(tip => !tip.startsWith("^"))) return { commits: [], nextCursor: null };
-    const exclusions = refExclusionPatterns(exclude).map(pattern => pattern.startsWith("refs/") ? pattern : `refs/heads/${pattern}`);
-    const explicit = revision.split(",").map(term => term.trim()).filter(term => term && term !== "all" && !term.startsWith("!"));
-    const matcher = (pattern: string) => {
-      const glob = new Bun.Glob(pattern);
-      return (name: string) => glob.match(name) || pattern.endsWith("/*") && name.startsWith(pattern.slice(0, -1));
-    };
-    const excludedRefs = exclusions.map(matcher);
-    const selectedRefs = explicit.map(matcher);
-    const refs = referenceNames((await this.references(signal)).filter(ref => {
-      const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
-      return !excludedRefs.some(matches => matches(ref.name)) || selectedRefs.some(matches => matches(ref.name) || matches(shorthand));
-    }));
-    const output = await this.run(["log", "--topo-order", "-z", `--format=${SUMMARY_FORMAT}`, `--skip=${offset}`, `--max-count=${limit + 1}`, ...tips, "--"], signal);
-    const commits = parseSummaries(output, refs);
-    if (commits.length <= limit) return { commits, nextCursor: null };
-    snapshot ??= createHash("sha256").update(JSON.stringify({ tips, revision, exclude })).digest("hex");
-    // Keep immutable tips server-side; cursor size must not grow with ref count.
+    const ids = saved.ids.slice(offset, offset + limit);
+    if (!ids.length) return { commits: [], nextCursor: null };
+    const output = await this.run(["log", "--no-walk=unsorted", "--stdin", "-z", `--format=${SUMMARY_FORMAT}`, "--"], signal, MAX_OUTPUT, ids.join("\n") + "\n");
+    const summaries = new Map(parseSummaries(output, saved.refs).map(commit => [commit.id, commit]));
+    const commits = ids.map(id => {
+      const commit = summaries.get(id);
+      if (!commit) throw new RepositoryError("GIT_FAILED", "Missing commit in history snapshot.");
+      return commit;
+    });
+    if (offset + limit >= saved.ids.length) return { commits, nextCursor: null };
     this.historySnapshots.delete(snapshot);
-    this.historySnapshots.set(snapshot, { tips, revision, exclude });
-    while (this.historySnapshots.size > MAX_HISTORY_SNAPSHOTS) {
-      this.historySnapshots.delete(this.historySnapshots.keys().next().value!);
+    this.historySnapshots.set(snapshot, saved);
+    let cachedCommits = [...this.historySnapshots.values()].reduce((total, entry) => total + entry.ids.length, 0);
+    while (this.historySnapshots.size > MAX_HISTORY_SNAPSHOTS || cachedCommits > MAX_HISTORY_SNAPSHOT_COMMITS) {
+      const oldest = this.historySnapshots.keys().next().value!;
+      cachedCommits -= this.historySnapshots.get(oldest)!.ids.length;
+      this.historySnapshots.delete(oldest);
     }
-    return { commits: commits.slice(0, limit), nextCursor: { snapshot, offset: offset + limit } };
+    return { commits, nextCursor: { snapshot, offset: offset + limit } };
   }
 
   private async comparison(id: string, signal?: AbortSignal): Promise<string[]> {

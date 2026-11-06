@@ -53,6 +53,19 @@ export function parseSummaries(output: string, refs: Map<string, string[]>): Com
   return commits;
 }
 
+export function parseTopology(output: string, refs: Map<string, string[]>): Pick<CommitSummary, "id" | "parents" | "references">[] {
+  const fields = records(output, 2);
+  const commits: Pick<CommitSummary, "id" | "parents" | "references">[] = [];
+  for (let index = 0; index < fields.length; index += 2) {
+    const id = fields[index]!;
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(id)) malformed();
+    const parents = fields[index + 1] ? fields[index + 1]!.split(" ") : [];
+    if (parents.some(parent => !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(parent))) malformed();
+    commits.push({ id, parents, references: refs.get(id) ?? [] });
+  }
+  return commits;
+}
+
 export function parseDetails(output: string, refs: Map<string, string[]>): Omit<CommitDetails, "files"> {
   const fields = records(output, 11);
   if (fields.length !== 11 || !fields[9]) malformed();

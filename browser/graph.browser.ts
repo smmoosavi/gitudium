@@ -1,4 +1,5 @@
 import { test, expect, summary, id } from "./fixtures";
+import { orderHistory } from "../src/repository/historyOrder";
 
 test("wide routed graphs clip and scroll together without moving text or changing paths", async ({ page, repository }) => {
   repository.historyCommits = Array.from({ length: 120 }, (_, index) => ({ ...summary(index),
@@ -36,12 +37,12 @@ test("wide routed graphs clip and scroll together without moving text or changin
 
 test("HEAD history precedes an independent tip and keyboard navigation follows the displayed order", async ({ page, repository }) => {
   repository.head = id(0);
-  repository.historyCommits = [
+  repository.historyCommits = orderHistory([
     { ...summary(50), parents: [id(4)], references: ["refs/heads/x"] },
     { ...summary(0), references: ["refs/heads/refactor/graph-routing-maintenance"] },
     summary(1), summary(2), summary(3),
     { ...summary(4), parents: [], references: ["refs/heads/main"] },
-  ];
+  ], repository.head);
   await page.reload();
   const expected = [0, 1, 2, 3, 50, 4];
   await expect(page.locator(".commits button")).toHaveCount(expected.length);
@@ -62,6 +63,7 @@ test("HEAD history precedes an independent tip and keyboard navigation follows t
   expect(repository.requests.filter(request => request.method === "commit").at(-1)?.input?.revision).toBe(id(4));
   await side.click();
   repository.head = id(50);
+  repository.historyCommits = orderHistory(repository.historyCommits, repository.head);
   await repository.invalidate(page);
   await expect(side).toHaveAttribute("data-commit-index", "0");
   await expect(side).toBeFocused();
@@ -74,24 +76,25 @@ test("HEAD history precedes an independent tip and keyboard navigation follows t
 test("appending priority-ordered pages preserves selected identity, visible rows, and lanes", async ({ page, repository }) => {
   repository.head = id(0);
   repository.historyPages = [
-    { commits: [{ ...summary(500), parents: [id(120)] },
-      ...Array.from({ length: 119 }, (_, index) => ({ ...summary(index), references: [] }))],
+    { commits: Array.from({ length: 120 }, (_, index) => ({ ...summary(index), references: [] })),
     nextCursor: { snapshot: "fixture-snapshot", offset: 120 } },
-    { commits: [summary(119), { ...summary(120), parents: [], references: ["refs/heads/main"] }], nextCursor: null },
+    { commits: [{ ...summary(500), parents: [id(120)] }, { ...summary(120), parents: [], references: ["refs/heads/main"] }], nextCursor: null },
   ];
   await page.reload();
   await expect(page.locator('[data-commit-index="0"]')).toHaveAttribute("data-commit-id", id(0));
   await expect(page.locator(".commits li").first()).toHaveAttribute("aria-setsize", "120");
   await page.locator('[data-commit-index="0"]').click();
   await page.keyboard.press("End");
+  await expect(page.locator(`[data-commit-id="${id(119)}"]`)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   const side = page.locator(`[data-commit-id="${id(500)}"]`);
   await expect(side).toBeFocused();
-  await expect(side).toHaveAttribute("data-commit-index", "119");
+  await expect(side).toHaveAttribute("data-commit-index", "120");
   await expect(page.locator(".commits li").first()).toHaveAttribute("aria-setsize", "122");
   await expect(side).toHaveAttribute("aria-pressed", "true");
   await expect(side.locator("circle").first()).toHaveAttribute("cx", "32");
   await page.keyboard.press("ArrowDown");
-  await expect(page.locator(`[data-commit-id="${id(119)}"]`)).toBeFocused();
-  await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 119");
+  await expect(page.locator(`[data-commit-id="${id(120)}"]`)).toBeFocused();
+  await expect(page.locator(".commit-summary h3")).toHaveText("Fixture commit 120");
   expect(repository.paginationAttempts).toBe(1);
 });

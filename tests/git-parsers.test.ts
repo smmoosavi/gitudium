@@ -1,8 +1,23 @@
 import { expect, test } from "bun:test";
-import { parseReferences, referenceNames, parseSummaries, parseDetails, parseChangedFiles, parseNumstat } from "../src/repository/parsers";
+import { parseReferences, referenceNames, parseSummaries, parseTopology, parseDetails, parseChangedFiles, parseNumstat } from "../src/repository/parsers";
 
 const fields = ["commit", "short", "parent1 parent2", "", "Name", "mail", "2026-01-01T00:00:00Z"];
 const record = (values: string[]) => values.join("\0") + "\0";
+
+test("lightweight topology retains SHA-1 and SHA-256 parents, open endpoints, and reference priorities", () => {
+  const child = "a".repeat(40);
+  const parent = "b".repeat(40);
+  const root = "c".repeat(64);
+  const refs = new Map([[child, ["refs/heads/main"]]]);
+  expect(parseTopology(record([child, `${parent} ${"d".repeat(40)}`, root, ""]), refs)).toEqual([
+    { id: child, parents: [parent, "d".repeat(40)], references: ["refs/heads/main"] },
+    { id: root, parents: [], references: [] },
+  ]);
+  expect(parseTopology("", refs)).toEqual([]);
+  for (const output of [record(["bad", ""]), record([child, "bad"]), record([child]), `${child}\0`]) {
+    expect(() => parseTopology(output, refs)).toThrow("Malformed Git output.");
+  }
+});
 
 test("reference parsers preserve ordering, symbolic targets and one-level tag peeling", () => {
   const output = [
