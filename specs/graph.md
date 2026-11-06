@@ -15,8 +15,8 @@ Recognize main and development names under `refs/heads/`, `refs/remotes/origin/`
 
 ### History ordering
 
-- Order independent commits by branch priority, keeping every child above all its parents, including merge parents. Preserve Git's order when priorities tie; commit dates do not override topology or branch priority.
-- Apply ordering within each loaded history page and propagate first-parent priorities across pages. Preserve loaded page boundaries so appending history does not reshuffle existing rows; an independent tip may remain above a higher-priority continuation in a later page.
+- Follow higher-priority first-parent histories first, grouping side histories immediately above their shared ancestors where topology permits. Keep every child above all its parents, including merge parents; use Git's order only to break remaining ties.
+- Load sufficient topology to determine structural order independently of pagination. Preserve established ordering as commit details are loaded.
 - Use the same display order for graph rows, commit text, selection, and keyboard navigation. Viewport width and horizontal scrolling must not affect it.
 
 ### Visual layout rules
