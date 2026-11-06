@@ -9,13 +9,16 @@ test("lightweight topology retains SHA-1 and SHA-256 parents, open endpoints, an
   const parent = "b".repeat(40);
   const root = "c".repeat(64);
   const refs = new Map([[child, ["refs/heads/main"]]]);
-  expect(parseTopology(record([child, `${parent} ${"d".repeat(40)}`, root, ""]), refs)).toEqual([
-    { id: child, parents: [parent, "d".repeat(40)], references: ["refs/heads/main"] },
-    { id: root, parents: [], references: [] },
+  expect(parseTopology(record([child, `${parent} ${"d".repeat(40)}`, "123", root, "", "-1"]), refs)).toEqual([
+    { id: child, parents: [parent, "d".repeat(40)], references: ["refs/heads/main"], committerTimestamp: 123 },
+    { id: root, parents: [], references: [], committerTimestamp: -1 },
   ]);
   expect(parseTopology("", refs)).toEqual([]);
   for (const output of [record(["bad", ""]), record([child, "bad"]), record([child]), `${child}\0`]) {
     expect(() => parseTopology(output, refs)).toThrow("Malformed Git output.");
+  }
+  for (const timestamp of ["", "1.5", "NaN", "1e3", "9007199254740992", " 1"]) {
+    expect(() => parseTopology(record([child, "", timestamp]), refs)).toThrow("Malformed Git output.");
   }
 });
 

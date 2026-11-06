@@ -2,6 +2,7 @@ export interface HistoryOrderNode {
   readonly id: string;
   readonly parents: readonly string[];
   readonly references: readonly string[];
+  readonly committerTimestamp: number;
 }
 
 export interface HistoryOrderContext {

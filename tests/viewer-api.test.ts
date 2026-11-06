@@ -77,6 +77,12 @@ test("repository queries navigate empty history, references, pages, details and 
 });
 
 test("repository API validates limits, revisions, paths and cursors", async () => {
+  await expect(api.history.query({ order: "unknown" as "recent" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+  const structural = await api.history.query({ order: "structural", limit: 1 });
+  const recent = await api.history.query({ order: "recent", limit: 1 });
+  expect(recent.nextCursor!.snapshot).not.toBe(structural.nextCursor!.snapshot);
+  await expect(api.history.query({ cursor: recent.nextCursor!, order: "structural" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+  expect((await api.history.query({ cursor: recent.nextCursor! })).commits).toHaveLength(1);
   expect((await api.history.query({ limit: HISTORY_CHUNK_SIZE })).commits).toHaveLength(2);
   for (const limit of [0, HISTORY_CHUNK_SIZE + 1, 1.5]) await expect(api.history.query({ limit })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
   await expect(api.commit.query({ revision: "--all" })).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });

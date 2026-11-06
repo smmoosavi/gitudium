@@ -9,7 +9,7 @@ const commit = (id: string, parents: string[] = [], references: string[] = []): 
 });
 const order = (source: CommitSummary[], head: string | null = null): CommitSummary[] => {
   const commits = new Map(source.map(commit => [commit.id, commit]));
-  return orderHistory({ source, head }).map(id => commits.get(id)!);
+  return orderHistory({ source: source.map(commit => ({ ...commit, committerTimestamp: 0 })), head }).map(id => commits.get(id)!);
 };
 const ids = (commits: CommitSummary[]) => commits.map(commit => commit.id);
 function expectTopological(commits: CommitSummary[]) {

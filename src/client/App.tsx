@@ -43,12 +43,23 @@ export function App() {
   const commitListRef = useRef<CommitListHandle>(null);
   const connection = useLiveConnection(token!);
   const [refExclusions, setRefExclusions] = usePreference(viewerPreferences.refExclusions);
-  const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision, refExclusions);
+  const [historyOrder, setHistoryOrder] = usePreference(viewerPreferences.historyOrder);
+  const revealSelection = useRef(false);
+  const { metadata, references, history, commits, loadMoreHistory } = useRepositoryQueries(revision, refExclusions, historyOrder);
   const localChanges = useQuery({ queryKey: ["localChanges"], enabled: metadata.isSuccess && !metadata.data.bare,
     queryFn: ({ signal }) => api.localChanges.query(undefined, { signal }), refetchInterval: 2000, retry: false });
   const hasLocalRow = metadata.isSuccess && !metadata.data.bare;
   const commitOffset = hasLocalRow ? 1 : 0;
   const selectedCommitIndex = commits.findIndex(commit => commit.id === selected);
+  useEffect(() => {
+    if (!revealSelection.current) return;
+    if (selected === null || localSelected) { revealSelection.current = false; return; }
+    if (selectedCommitIndex >= 0) {
+      commitListRef.current?.reveal(selectedCommitIndex, false);
+      revealSelection.current = false;
+    } else if (history.hasNextPage && !history.isFetching && !history.isError) loadMoreHistory();
+    else if (history.isSuccess && !history.hasNextPage && !history.isFetching) revealSelection.current = false;
+  }, [selected, localSelected, selectedCommitIndex, history.data, history.isFetching, history.isError, history.isSuccess, history.hasNextPage, loadMoreHistory]);
   const revealHistory = (index: number, focus: boolean) => {
     if (hasLocalRow && index === 0) {
       if (focus) historyRef.current?.querySelector<HTMLButtonElement>(".local-changes-row")?.focus({ preventScroll: true });
@@ -69,7 +80,7 @@ export function App() {
   useEffect(() => {
     // Refreshes can move the selected ID to a different row. Follow it while
     // navigating history without scrolling history when another pane is active.
-    if (focusedPane !== "commits") return;
+    if (focusedPane !== "commits" || revealSelection.current || historyRef.current?.contains(document.activeElement) && !document.activeElement?.closest("[data-commit-id], .local-changes-row")) return;
     const index = localSelected ? 0 : selectedCommitIndex < 0 ? -1 : selectedCommitIndex + commitOffset;
     revealHistory(index, selected !== null);
   }, [selected, focusedPane, selectedCommitIndex, hasLocalRow]);
@@ -88,6 +99,7 @@ export function App() {
     </div>
     <div ref={viewerRef} className={`viewer layout-${mode}`} style={{ gridTemplateColumns: columns, gridTemplateRows: mode === "columns" ? "minmax(0, 1fr)" : split(sizes.secondary) }}>
       <HistoryPane historyRef={historyRef} commitListRef={commitListRef} focusedPane={focusedPane} onPaneFocus={setFocusedPane}
+        order={historyOrder} onOrderChange={value => { revealSelection.current = true; setHistoryOrder(value); }}
         refExclusions={refExclusions} onRefExclusionsChange={value => { setRefExclusions(value); setSelected(null); setFocusedPane("commits"); }}
         revision={revision} onRevisionChange={value => { setRevision(value); setSelected(null); setFocusedPane("commits"); }}
         references={references.data} referencesPending={references.isPending} referencesSuccess={references.isSuccess}

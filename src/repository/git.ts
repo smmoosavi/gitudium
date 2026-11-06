@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseTopology, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
-import { orderHistory } from "./historyOrder";
+import { orderHistory, isHistoryOrderMode, type HistoryOrderMode } from "./historyOrder";
 import { GitRunner, MAX_OUTPUT } from "./runner";
 import { isRevision, isHistoryExpression, isRefExclusions, refExclusionPatterns, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
@@ -19,6 +19,7 @@ const MAX_HISTORY_SNAPSHOT_COMMITS = 1_000_000;
 const MAX_TOPOLOGY_OUTPUT = 64 * 1024 * 1024;
 
 interface HistorySnapshot {
+  order: HistoryOrderMode;
   ids: readonly string[];
   refs: Map<string, string[]>;
 }
@@ -169,7 +170,8 @@ export class GitRepositoryReader implements RepositoryReader {
   async history(query: HistoryQuery = {}, signal?: AbortSignal): Promise<HistoryPage> {
     const limit = query.limit ?? 50;
     if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_CHUNK_SIZE) invalid(`History limit must be between 1 and ${HISTORY_CHUNK_SIZE}.`);
-    if (query.cursor && (query.revision !== undefined || query.exclude !== undefined)) invalid("Use either a cursor or revision/exclusion settings, not both.");
+    if (query.order !== undefined && !isHistoryOrderMode(query.order)) invalid("Unknown history order.");
+    if (query.cursor && (query.revision !== undefined || query.exclude !== undefined || query.order !== undefined)) invalid("Use either a cursor or revision/exclusion/order settings, not both.");
     let snapshot: string;
     let saved: HistorySnapshot;
     let offset = 0;
@@ -184,6 +186,7 @@ export class GitRepositoryReader implements RepositoryReader {
       this.historySnapshots.set(snapshot, saved);
       offset = cursor.offset;
     } else {
+      const order = query.order ?? "structural";
       const revision = query.revision === undefined ? "" : query.revision;
       const exclude = query.exclude ?? "";
       const tips = await this.historyTips(revision, signal, exclude);
@@ -204,11 +207,11 @@ export class GitRepositoryReader implements RepositoryReader {
       try { head = await this.resolve("HEAD", signal); } catch (error) {
         if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
       }
-      const output = await this.run(["log", "--topo-order", "-z", "--format=%H%x00%P", ...tips, "--"], signal, MAX_TOPOLOGY_OUTPUT);
-      const ids = orderHistory({ source: parseTopology(output, refs), head });
+      const output = await this.run(["log", "--topo-order", "-z", "--format=%H%x00%P%x00%ct", ...tips, "--"], signal, MAX_TOPOLOGY_OUTPUT);
+      const ids = orderHistory({ source: parseTopology(output, refs), head }, order);
       if (ids.length > MAX_HISTORY_SNAPSHOT_COMMITS) throw new RepositoryError("OUTPUT_LIMIT", "History topology exceeded the configured commit limit.");
-      snapshot = createHash("sha256").update(JSON.stringify({ tips, revision, exclude, head, refs: [...refs], ids })).digest("hex");
-      saved = this.historySnapshots.get(snapshot) ?? { ids, refs };
+      snapshot = createHash("sha256").update(JSON.stringify({ tips, revision, exclude, order, head, refs: [...refs], ids })).digest("hex");
+      saved = this.historySnapshots.get(snapshot) ?? { ids, refs, order };
     }
     const ids = saved.ids.slice(offset, offset + limit);
     if (!ids.length) return { commits: [], nextCursor: null };

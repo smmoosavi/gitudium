@@ -4,7 +4,7 @@ import type { CommitSummary } from "../src/repository/types";
 
 function orderedCommits(source: CommitSummary[], head: string | null): CommitSummary[] {
   const commits = new Map(source.map(commit => [commit.id, commit]));
-  return orderHistory({ source, head }).map(id => commits.get(id)!);
+  return orderHistory({ source: source.map(commit => ({ ...commit, committerTimestamp: 0 })), head }).map(id => commits.get(id)!);
 }
 
 test("wide routed graphs clip and scroll together without moving text or changing paths", async ({ page, repository }) => {

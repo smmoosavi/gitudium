@@ -7,7 +7,7 @@ export function referencePriority(reference: string): number {
   return reference === "HEAD" ? 2 : 3;
 }
 
-export function indexCommitTopology(commits: readonly HistoryOrderNode[], head: string | null = null) {
+export function indexCommitTopology(commits: readonly Pick<HistoryOrderNode, "id" | "parents" | "references">[], head: string | null = null) {
   const indexes = new Map(commits.map((commit, index) => [commit.id, index]));
   const priorities = commits.map(commit => Math.min(commit.id === head ? 2 : 3, ...commit.references.map(referencePriority)));
   const firstParentChildren: number[][] = commits.map(() => []);

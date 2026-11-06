@@ -1,5 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import type { CommitDetails, CommitSummary, HistoryPage, RepositoryMetadata, Reference, LocalChanges } from "../src/repository/types";
+import { orderHistory } from "../src/repository/historyOrder";
 
 export const id = (index: number) => (index + 1).toString(16).padStart(40, "0");
 const author = { name: "Fixture Author", email: "fixture@example.test", date: "2026-01-01T12:00:00Z" };
@@ -16,6 +17,8 @@ const details = (revision: string): CommitDetails => ({
 export class RepositoryFixture {
   localChanges: LocalChanges = { available: true, head: id(0), version: "initial", files: [] };
   historyCommits: CommitSummary[] | null = null;
+  historyTimestamps: Map<string, number> | null = null;
+  private historySnapshots = new Map<string, CommitSummary[]>();
   historyPages: HistoryPage[] | null = null;
   head: string | null | undefined;
   localText = "working fixture";
@@ -78,6 +81,19 @@ export class RepositoryFixture {
         commitId: id(name === "main" ? (this.refreshed ? 300 : 0) : 200), symbolicTarget: null,
       } satisfies Reference));
       case "history": {
+        if (this.historyTimestamps && this.historyCommits) {
+          const cursor = input?.cursor as { snapshot: string; offset: number } | undefined;
+          const snapshot = cursor?.snapshot ?? `fixture-${input?.order ?? "structural"}`;
+          if (!cursor) {
+            const source = this.historyCommits.map(commit => ({ ...commit, committerTimestamp: this.historyTimestamps!.get(commit.id) ?? 0 }));
+            const byId = new Map(this.historyCommits.map(commit => [commit.id, commit]));
+            this.historySnapshots.set(snapshot, orderHistory({ source, head: this.head ?? id(0) }, input?.order === "recent" ? "recent" : "structural").map(id => byId.get(id)!));
+          }
+          const commits = this.historySnapshots.get(snapshot)!;
+          const offset = cursor?.offset ?? 0;
+          const end = offset + 120;
+          return { commits: commits.slice(offset, end), nextCursor: end < commits.length ? { snapshot, offset: end } : null } satisfies HistoryPage;
+        }
         if (this.historyPages) {
           const offset = (input?.cursor as { offset: number } | undefined)?.offset ?? 0;
           let start = 0;

@@ -298,6 +298,48 @@ test("history cursors stay small across many distinct tips and preserve the full
   await expect(other.history({ cursor: first.nextCursor! })).rejects.toMatchObject({ code: "INVALID_INPUT", message: expect.stringContaining("expired") });
 });
 
+test("recent snapshots preserve ready timestamp order and mode across ref changes", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  const tree = await git(path, "rev-parse", "HEAD^{tree}");
+  const dated = async (name: string, timestamp: number, parents: string[]) => {
+    const child = Bun.spawn(["git", "commit-tree", tree, ...parents.flatMap(parent => ["-p", parent]), "-m", name], {
+      cwd: path, stdout: "pipe", stderr: "pipe",
+      env: { ...process.env, GIT_COMMITTER_DATE: `${timestamp} +0000` },
+    });
+    const output = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(0);
+    return output.trim();
+  };
+  const main = await dated("main", 1_700_000_100, [root]);
+  const side = await dated("side", 1_700_000_200, [root]);
+  const merge = await dated("merge skew", 1_700_000_001, [main, side]);
+  const other = await dated("other", 1_700_000_050, []);
+  await git(path, "update-ref", "refs/heads/main", merge);
+  await git(path, "update-ref", "refs/heads/other", other);
+  const reader = await GitRepositoryReader.discover(path);
+  await expect(reader.history({ order: "bad" as "recent" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  const structural = await reader.history({ order: "structural", limit: 1 });
+  const recent = await reader.history({ order: "recent", limit: 1 });
+  expect(structural.commits[0]!.id).toBe(merge);
+  expect(recent.commits[0]!.id).toBe(other);
+  expect(recent.nextCursor!.snapshot).not.toBe(structural.nextCursor!.snapshot);
+  for (const order of ["structural", "recent"] as const) {
+    await expect(reader.history({ cursor: recent.nextCursor!, order })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  }
+  await git(path, "update-ref", "refs/heads/main", main);
+  await git(path, "update-ref", "-d", "refs/heads/other");
+  const remaining: string[] = [];
+  let cursor = recent.nextCursor;
+  while (cursor) {
+    const page = await reader.history({ cursor, limit: 1 });
+    remaining.push(...page.commits.map(commit => commit.id));
+    cursor = page.nextCursor;
+  }
+  expect(remaining).toEqual([merge, side, main, root]);
+  expect((await reader.history({ order: "recent" })).commits.map(commit => commit.id)).toEqual([main, root]);
+});
+
 test("history snapshots are reused and evicted least recently used with a bounded cache", async () => {
   const path = await fixture();
   const root = await commit(path, "root", "root", "root");
@@ -336,7 +378,7 @@ test("history discovers branch bases before paginating and loads summaries only 
   internal.run = (...args) => { commands.push({ args: args[0], input: args[3] }); return run(...args); };
   const first = await reader.history({ limit: 2 });
   expect(first.commits.map(commit => commit.id)).toEqual([main, fix116]);
-  expect(commands.filter(command => command.args.includes("--format=%H%x00%P"))).toHaveLength(1);
+  expect(commands.filter(command => command.args.includes("--format=%H%x00%P%x00%ct"))).toHaveLength(1);
   expect(commands.filter(command => command.args.includes("--no-walk=unsorted")).map(command => command.input))
     .toEqual([`${main}\n${fix116}\n`]);
   await git(path, "update-ref", "-d", "refs/heads/hot-fix/1.15");
@@ -350,7 +392,7 @@ test("history discovers branch bases before paginating and loads summaries only 
     cursor = page.nextCursor;
   }
   expect(remaining).toEqual([base116, fix115new, fix115old, base115]);
-  expect(commands.filter(command => command.args.includes("--format=%H%x00%P"))).toHaveLength(1);
+  expect(commands.filter(command => command.args.includes("--format=%H%x00%P%x00%ct"))).toHaveLength(1);
   const refreshed = await reader.history({ limit: 2 });
   expect(refreshed.commits[0]!.id).toBe(fix116);
   expect(refreshed.nextCursor!.snapshot).not.toBe(first.nextCursor!.snapshot);

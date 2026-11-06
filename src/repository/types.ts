@@ -43,6 +43,7 @@ export interface HistoryCursor {
 }
 
 export interface HistoryQuery {
+  order?: import("./historyOrder").HistoryOrderMode;
   /** Comma-separated revisions or ref globs; ! excludes reachable commits. Empty selects all refs and HEAD. */
   revision?: string;
   /** Comma-separated ref patterns omitted from all-ref roots; explicit positive selections override them. */

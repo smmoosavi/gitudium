@@ -2,6 +2,17 @@ import { readDiffMode, writeDiffMode, readDiffWrap, writeDiffWrap, readLinePairi
 import { readFilesMode, writeFilesMode } from "./files";
 import { defaultLayout, readLayout, writeLayout } from "./layout";
 import { isRefExclusions } from "../repository/validation";
+import { isHistoryOrderMode, type HistoryOrderMode } from "../repository/historyOrder";
+
+export const historyOrderStorageKey = "gitudium.history-order.v1";
+const historyOrder: Preference<HistoryOrderMode> = {
+  defaultValue: () => "structural",
+  read: storage => {
+    const saved = storage.getItem(historyOrderStorageKey);
+    return isHistoryOrderMode(saved) ? saved : "structural";
+  },
+  write: (storage, value) => storage.setItem(historyOrderStorageKey, value),
+};
 
 export const refExclusionsStorageKey = "gitudium.ref-exclusions.v1";
 const refExclusions: Preference<string> = {
@@ -54,6 +65,7 @@ const gitAlgorithm: Preference<import("../repository/types").GitDiffAlgorithm> =
 };
 
 export const viewerPreferences = {
+  historyOrder,
   gitAlgorithm,
   diffAlgorithm,
   refExclusions,

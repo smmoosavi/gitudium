@@ -4,8 +4,19 @@ import { useViewerPreferences } from "../src/client/useViewerPreferences";
 import { defaultLayout, layoutStorageKey } from "../src/client/layout";
 import { diffStorageKey, wrapStorageKey, pairingStorageKey, whitespaceStorageKey } from "../src/client/diff";
 import { filesStorageKey } from "../src/client/files";
-import { gitAlgorithmStorageKey, diffAlgorithmStorageKey, readPreference, writePreference, viewerPreferences, type Preference } from "../src/client/preferences";
+import { historyOrderStorageKey, gitAlgorithmStorageKey, diffAlgorithmStorageKey, readPreference, writePreference, viewerPreferences, type Preference } from "../src/client/preferences";
 import { usePreference } from "../src/client/usePreference";
+
+test("history order defaults, validates storage and persists", () => {
+  const values = new Map<string, string>();
+  const storage = () => ({ getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } });
+  expect(readPreference(viewerPreferences.historyOrder, storage)).toBe("structural");
+  values.set(historyOrderStorageKey, "invalid");
+  expect(readPreference(viewerPreferences.historyOrder, storage)).toBe("structural");
+  writePreference(viewerPreferences.historyOrder, "recent", storage);
+  expect(readPreference(viewerPreferences.historyOrder, storage)).toBe("recent");
+  expect(readPreference(viewerPreferences.historyOrder, () => { throw new Error("blocked"); })).toBe("structural");
+});
 
 function Preferences() {
   const { wrap, filesMode, diffMode, layout } = useViewerPreferences();

@@ -7,12 +7,12 @@ export function testHistoryOrderContract(name: string, strategy: HistoryOrderStr
       { source: [], head: null },
       {
         source: [
-          { id: "merge", parents: ["main", "side", "missing"], references: ["refs/heads/main"] },
-          { id: "other", parents: ["side"], references: ["refs/heads/development"] },
-          { id: "main", parents: ["base"], references: [] },
-          { id: "side", parents: ["base"], references: [] },
-          { id: "base", parents: [], references: [] },
-          { id: "disconnected", parents: ["unloaded"], references: [] },
+          { id: "merge", parents: ["main", "side", "missing"], references: ["refs/heads/main"], committerTimestamp: 1 },
+          { id: "other", parents: ["side"], references: ["refs/heads/development"], committerTimestamp: 10 },
+          { id: "main", parents: ["base"], references: [], committerTimestamp: 100 },
+          { id: "side", parents: ["base"], references: [], committerTimestamp: 1000 },
+          { id: "base", parents: [], references: [], committerTimestamp: 10000 },
+          { id: "disconnected", parents: ["unloaded"], references: [], committerTimestamp: 10 },
         ],
         head: "other",
       },

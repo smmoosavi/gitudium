@@ -5,8 +5,11 @@ import { Failure } from "./Failure";
 import { ReferenceSelector } from "./ReferenceSelector";
 import { LogSettings } from "./LogSettings";
 import type { FocusedPane } from "./navigation";
+import type { HistoryOrderMode } from "../repository/historyOrder";
 
 interface HistoryPaneProps {
+  order?: HistoryOrderMode;
+  onOrderChange?: (value: HistoryOrderMode) => void;
   historyRef: Ref<HTMLElement>;
   commitListRef: Ref<CommitListHandle>;
   focusedPane: FocusedPane;
@@ -34,7 +37,7 @@ interface HistoryPaneProps {
   localChanges?: { count: number | undefined; selected: boolean; pending: boolean; error: boolean; onSelect: () => void };
 }
 
-export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocus, revision, onRevisionChange, refExclusions = "", onRefExclusionsChange,
+export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocus, revision, onRevisionChange, refExclusions = "", onRefExclusionsChange, order, onOrderChange,
   references, referencesPending, referencesSuccess, referencesError, onReferencesRetry,
   historyPending, historySuccess, historyError, onHistoryRetry, commits, head, selected, onSelect,
   canLoadMore, onLoadMore, fetchingNextPage, localChanges }: HistoryPaneProps) {
@@ -57,7 +60,7 @@ export function HistoryPane({ historyRef, commitListRef, focusedPane, onPaneFocu
   };
   return (
       <section ref={historyRef} className={`history-panel${focusedPane === "commits" ? " pane-focused" : ""}`} aria-labelledby="history-title" onPointerDown={() => onPaneFocus("commits")} onFocusCapture={() => onPaneFocus("commits")}>
-        <div className="panel-heading log-heading"><h2 id="history-title">Log</h2>{onRefExclusionsChange && <LogSettings value={refExclusions} onChange={onRefExclusionsChange} />}</div>
+        <div className="panel-heading log-heading"><h2 id="history-title">Log</h2>{onRefExclusionsChange && <LogSettings value={refExclusions} onChange={onRefExclusionsChange} order={order} onOrderChange={onOrderChange} />}</div>
         <div className="history-toolbar">
         <ReferenceSelector value={revision} references={references ?? []} onChange={onRevisionChange} onCommitFocus={focusCommits} /></div>
         {localChanges && <div className="local-changes-pinned"><button type="button" className="local-changes-row" aria-pressed={localChanges.selected}

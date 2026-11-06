@@ -8,6 +8,6 @@ for (const [name, strategy] of Object.entries(historyOrderStrategies)) {
 testHistoryOrderContract("default dispatch", orderHistory);
 
 test("explicit structural selection matches default dispatch", () => {
-  const context = { source: [{ id: "tip", parents: ["open"], references: [] }], head: "tip" };
+  const context = { source: [{ id: "tip", parents: ["open"], references: [], committerTimestamp: 0 }], head: "tip" };
   expect(orderHistory(context, "structural")).toEqual(orderHistory(context));
 });

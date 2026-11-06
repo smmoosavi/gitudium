@@ -15,8 +15,9 @@ Recognize main and development names under `refs/heads/`, `refs/remotes/origin/`
 
 ### History ordering
 
-- Follow higher-priority first-parent histories first, grouping side histories immediately above their shared ancestors where topology permits. Keep every child above all its parents, including merge parents; use Git's order only to break remaining ties.
-- Load sufficient topology to determine structural order independently of pagination. Preserve established ordering as commit details are loaded.
+- Default to Branch structure: follow higher-priority first-parent histories first, grouping side histories immediately above their shared ancestors where topology permits; use Git's order only to break remaining ties.
+- Offer Recent activity: prioritize the newest committer timestamp among ready commits, breaking ties with Git's source order. Both orders must keep every child above all loaded parents, including merge parents. Branch-priority lane allocation remains independent of ordering.
+- Load sufficient topology to determine the selected order independently of pagination. Preserve established ordering as commit details are loaded.
 - Use the same display order for graph rows, commit text, selection, and keyboard navigation. Viewport width and horizontal scrolling must not affect it.
 
 ### Visual layout rules

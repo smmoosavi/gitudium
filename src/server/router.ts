@@ -42,6 +42,7 @@ export const appRouter = t.router({
   metadata: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.metadata(signal))),
   references: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.references(signal))),
   history: repositoryProcedure.input(z.object({
+    order: z.enum(["structural", "recent"]).optional(),
     revision: z.string().max(1024).refine(isHistoryExpression, "Expected a history revision expression.").optional(),
     exclude: z.string().max(1024).refine(isRefExclusions, "Expected comma-separated ref exclusion patterns.").optional(),
     limit: z.number().int().min(1).max(HISTORY_CHUNK_SIZE).optional(),
