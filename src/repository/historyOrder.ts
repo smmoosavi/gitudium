@@ -19,7 +19,7 @@ export function orderHistory<T extends Pick<CommitSummary, "id" | "parents" | "r
     }
     if (!loadedParents) roots.push(index);
   });
-  roots.sort((left, right) => importance[left]! - importance[right]! || first[left]! - first[right]!);
+  roots.sort((left, right) => importance[left]! - importance[right]! || priorities[left]! - priorities[right]! || first[left]! - first[right]!);
   for (const [parent, list] of children.entries()) {
     list.sort((left, right) => priorities[left]! - priorities[right]!
       || Number(source[left]!.parents[0] !== source[parent]!.id) - Number(source[right]!.parents[0] !== source[parent]!.id)

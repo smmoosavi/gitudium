@@ -56,6 +56,16 @@ test("merge parents wait for every child, even when a parent has higher priority
   expect(ids(commits)).toHaveLength(6);
 });
 
+test("excluding a merge base preserves the higher-priority first-parent spine", () => {
+  const source = [commit("merge", ["main-parent", "side-parent"], ["refs/heads/main"]),
+    commit("side-parent", ["base"]), commit("main-parent", ["base"])];
+  const complete = order([...source, commit("base")]);
+  const filtered = order(source);
+  expect(ids(complete)).toEqual(["merge", "main-parent", "side-parent", "base"]);
+  expect(ids(filtered)).toEqual(ids(complete).filter(id => id !== "base"));
+  expectTopological(filtered);
+});
+
 test("equal priorities keep connected histories together, with source-order ties and open parents", () => {
   const commits = [commit("merge", ["a", "missing"]), commit("root"), commit("other", ["a"]), commit("a")];
   expect(ids(order(commits))).toEqual(["merge", "other", "a", "root"]);
