@@ -1,5 +1,11 @@
 import { test, expect, summary, id } from "./fixtures";
 import { orderHistory } from "../src/repository/historyOrder";
+import type { CommitSummary } from "../src/repository/types";
+
+function orderedCommits(source: CommitSummary[], head: string | null): CommitSummary[] {
+  const commits = new Map(source.map(commit => [commit.id, commit]));
+  return orderHistory({ source, head }).map(id => commits.get(id)!);
+}
 
 test("wide routed graphs clip and scroll together without moving text or changing paths", async ({ page, repository }) => {
   repository.historyCommits = Array.from({ length: 120 }, (_, index) => ({ ...summary(index),
@@ -37,7 +43,7 @@ test("wide routed graphs clip and scroll together without moving text or changin
 
 test("HEAD history precedes an independent tip and keyboard navigation follows the displayed order", async ({ page, repository }) => {
   repository.head = id(0);
-  repository.historyCommits = orderHistory([
+  repository.historyCommits = orderedCommits([
     { ...summary(50), parents: [id(4)], references: ["refs/heads/x"] },
     { ...summary(0), references: ["refs/heads/refactor/graph-routing-maintenance"] },
     summary(1), summary(2), summary(3),
@@ -63,7 +69,7 @@ test("HEAD history precedes an independent tip and keyboard navigation follows t
   expect(repository.requests.filter(request => request.method === "commit").at(-1)?.input?.revision).toBe(id(4));
   await side.click();
   repository.head = id(50);
-  repository.historyCommits = orderHistory(repository.historyCommits, repository.head);
+  repository.historyCommits = orderedCommits(repository.historyCommits, repository.head);
   await repository.invalidate(page);
   await expect(side).toHaveAttribute("data-commit-index", "0");
   await expect(side).toBeFocused();

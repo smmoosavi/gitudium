@@ -1,4 +1,4 @@
-import type { CommitSummary } from "./types";
+import type { HistoryOrderNode } from "./historyOrdering";
 
 export function referencePriority(reference: string): number {
   const name = reference.match(/^refs\/(?:heads\/|remotes\/(?:origin|upstream)\/)([^/]+)$/)?.[1] ?? "";
@@ -7,7 +7,7 @@ export function referencePriority(reference: string): number {
   return reference === "HEAD" ? 2 : 3;
 }
 
-export function indexCommitTopology(commits: Pick<CommitSummary, "id" | "parents" | "references">[], head: string | null = null) {
+export function indexCommitTopology(commits: readonly HistoryOrderNode[], head: string | null = null) {
   const indexes = new Map(commits.map((commit, index) => [commit.id, index]));
   const priorities = commits.map(commit => Math.min(commit.id === head ? 2 : 3, ...commit.references.map(referencePriority)));
   const firstParentChildren: number[][] = commits.map(() => []);

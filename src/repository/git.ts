@@ -19,7 +19,7 @@ const MAX_HISTORY_SNAPSHOT_COMMITS = 1_000_000;
 const MAX_TOPOLOGY_OUTPUT = 64 * 1024 * 1024;
 
 interface HistorySnapshot {
-  ids: string[];
+  ids: readonly string[];
   refs: Map<string, string[]>;
 }
 
@@ -205,7 +205,7 @@ export class GitRepositoryReader implements RepositoryReader {
         if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
       }
       const output = await this.run(["log", "--topo-order", "-z", "--format=%H%x00%P", ...tips, "--"], signal, MAX_TOPOLOGY_OUTPUT);
-      const ids = orderHistory(parseTopology(output, refs), head).map(commit => commit.id);
+      const ids = orderHistory({ source: parseTopology(output, refs), head });
       if (ids.length > MAX_HISTORY_SNAPSHOT_COMMITS) throw new RepositoryError("OUTPUT_LIMIT", "History topology exceeded the configured commit limit.");
       snapshot = createHash("sha256").update(JSON.stringify({ tips, revision, exclude, head, refs: [...refs], ids })).digest("hex");
       saved = this.historySnapshots.get(snapshot) ?? { ids, refs };

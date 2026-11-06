@@ -7,7 +7,10 @@ import { layoutCommitGraph } from "../src/client/graph";
 const commit = (id: string, parents: string[] = [], references: string[] = []): CommitSummary => ({
   id, parents, references, shortId: id, subject: id, author: { name: "Test", email: "", date: "" },
 });
-const order = orderHistory<CommitSummary>;
+const order = (source: CommitSummary[], head: string | null = null): CommitSummary[] => {
+  const commits = new Map(source.map(commit => [commit.id, commit]));
+  return orderHistory({ source, head }).map(id => commits.get(id)!);
+};
 const ids = (commits: CommitSummary[]) => commits.map(commit => commit.id);
 function expectTopological(commits: CommitSummary[]) {
   const indexes = new Map(commits.map((commit, index) => [commit.id, index]));
