@@ -3,6 +3,7 @@ import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
 import { LocalChangesReader } from "./local";
 import { gitDiffFlags } from "./diffOptions";
+import { parseHistorySelection, type HistorySelection } from "./historySelection";
 import type { LocalScope } from "./types";
 import type {
   ChangedFile, CommitDetails, DiffResult, HistoryPage,
@@ -12,7 +13,7 @@ import type {
 import { SUMMARY_FORMAT, DETAILS_FORMAT, parseReferences, referenceNames, parseSummaries, parseTopology, parseDetails, parseChangedFiles, parseNumstat } from "./parsers";
 import { orderHistory, isHistoryOrderMode, type HistoryOrderMode } from "./historyOrder";
 import { GitRunner, MAX_OUTPUT } from "./runner";
-import { isRevision, isHistoryExpression, isRefExclusions, refExclusionPatterns, isLiteralPath } from "./validation";
+import { isRevision, isLiteralPath } from "./validation";
 const MAX_DIFF = 1024 * 1024;
 const MAX_TIPS = 4096;
 const MAX_HISTORY_SNAPSHOTS = 128;
@@ -128,31 +129,23 @@ export class GitRepositoryReader implements RepositoryReader {
     return tips;
   }
 
-  private async historyTips(expression: string, signal?: AbortSignal, exclude = ""): Promise<string[]> {
-    if (!isHistoryExpression(expression)) invalid("Expected a history revision expression.");
-    if (!isRefExclusions(exclude)) invalid("Expected comma-separated ref exclusion patterns.");
-    const exclusions = refExclusionPatterns(exclude).map(pattern => pattern.startsWith("refs/") ? pattern : `refs/heads/${pattern}`);
-    const terms = expression.trim() ? expression.split(",").map(term => term.trim()) : [];
+  private async historyTips(selection: HistorySelection, signal?: AbortSignal): Promise<string[]> {
+    const { terms, exclusions } = selection;
     const positive = new Set<string>();
     const negative = new Set<string>();
-    if (!terms.some(term => !term.startsWith("!"))) {
+    if (selection.implicitAll) {
       for (const id of await this.allHistoryTips(signal, exclusions)) positive.add(id);
     }
     let refs: Reference[] | undefined;
     for (const term of terms) {
-      const excluded = term.startsWith("!");
-      const revision = excluded ? term.slice(1) : term;
+      const { excluded, revision } = term;
       const selected = excluded ? negative : positive;
       if (revision === "all") {
         for (const id of await this.allHistoryTips(signal, excluded ? [] : exclusions)) selected.add(id);
-      } else if (/[*?\[]/.test(revision)) {
+      } else if (term.wildcard) {
         refs ??= await this.references(signal);
-        const glob = new Bun.Glob(revision);
         for (const ref of refs) {
-          const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
-          const matches = (value: string) => glob.match(value)
-            || revision.endsWith("/*") && value.startsWith(revision.slice(0, -1));
-          if (matches(ref.name) || matches(shorthand)) {
+          if (term.matchesReference(ref.name)) {
             // Resolve the full ref to peel nested annotated tags, too.
             try { selected.add(await this.resolve(ref.name, signal)); } catch (error) {
               if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;
@@ -190,20 +183,10 @@ export class GitRepositoryReader implements RepositoryReader {
       const order = query.order ?? "structural";
       const revision = query.revision === undefined ? "" : query.revision;
       const exclude = query.exclude ?? "";
-      const tips = await this.historyTips(revision, signal, exclude);
+      const selection = parseHistorySelection(revision, exclude);
+      const tips = await this.historyTips(selection, signal);
       if (!tips.some(tip => !tip.startsWith("^"))) return { commits: [], nextCursor: null };
-      const exclusions = refExclusionPatterns(exclude).map(pattern => pattern.startsWith("refs/") ? pattern : `refs/heads/${pattern}`);
-      const explicit = revision.split(",").map(term => term.trim()).filter(term => term && term !== "all" && !term.startsWith("!"));
-      const matcher = (pattern: string) => {
-        const glob = new Bun.Glob(pattern);
-        return (name: string) => glob.match(name) || pattern.endsWith("/*") && name.startsWith(pattern.slice(0, -1));
-      };
-      const excludedRefs = exclusions.map(matcher);
-      const selectedRefs = explicit.map(matcher);
-      const refs = referenceNames((await this.references(signal)).filter(ref => {
-        const shorthand = ref.name.replace(/^refs\/(?:heads|remotes|tags)\//, "");
-        return !excludedRefs.some(matches => matches(ref.name)) || selectedRefs.some(matches => matches(ref.name) || matches(shorthand));
-      }));
+      const refs = referenceNames((await this.references(signal)).filter(ref => selection.includesDecoration(ref.name)));
       let head: string | null = null;
       try { head = await this.resolve("HEAD", signal); } catch (error) {
         if (!(error instanceof RepositoryError) || error.code !== "REVISION_NOT_FOUND") throw error;

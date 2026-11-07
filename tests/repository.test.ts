@@ -743,3 +743,32 @@ test("saved ref exclusions omit roots, retain shared ancestors, and yield to exp
   await git(path, "checkout", "--detach", agent);
   expect((await reader.history({ exclude })).commits.map(item => item.id)).toContain(agent);
 });
+
+test("explicit selection shares full and shorthand matching with excluded decorations", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  await git(path, "checkout", "-b", "docs/team/work");
+  const selected = await commit(path, "selected", "selected", "selected");
+  await git(path, "update-ref", "refs/remotes/origin/team/work", selected);
+  await git(path, "update-ref", "refs/agents/team/work", selected);
+  await git(path, "tag", "release/work", selected);
+  await git(path, "checkout", "main");
+  const reader = await GitRepositoryReader.discover(path);
+  const exclude = "docs/*, refs/remotes/*, refs/tags/*, refs/agents/*";
+  for (const [revision, decoration] of [
+    ["docs/team/work", "refs/heads/docs/team/work"], ["refs/heads/docs/*", "refs/heads/docs/team/work"],
+    ["docs/*", "refs/heads/docs/team/work"], ["origin/*", "refs/remotes/origin/team/work"],
+    ["refs/remotes/origin/*", "refs/remotes/origin/team/work"], ["release/*", "refs/tags/release/work"],
+    ["refs/agents/*", "refs/agents/team/work"],
+  ] as const) {
+    const page = await reader.history({ revision, exclude, limit: 1 });
+    expect(page.commits.map(item => item.id)).toEqual([selected]);
+    expect(page.commits[0]!.references).toEqual([decoration]);
+    await git(path, "update-ref", decoration, root);
+    const remainder = await reader.history({ cursor: page.nextCursor! });
+    expect(remainder.commits.map(item => item.id)).toEqual([root]);
+    expect(remainder.commits[0]!.references).not.toContain(decoration);
+    await git(path, "update-ref", decoration, selected);
+  }
+  expect((await reader.history({ exclude })).commits.map(item => item.id)).toEqual([root]);
+});
