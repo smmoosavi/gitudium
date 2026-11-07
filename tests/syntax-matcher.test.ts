@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createDiffEngine } from "../src/client/diffEngine";
+import { createSyntaxDiffEngine } from "../src/client/syntaxDiffEngine";
 import { createSyntaxMatcher, type MatchToken } from "../src/client/syntaxMatcher";
 
 const token = (text: string, type = "identifier"): MatchToken => ({ text, type });
@@ -17,7 +18,7 @@ test("inline matching does not preserve equal text in different syntax roles", (
 
 test("syntax engine preserves source text, coordinates, markers and shared highlights", () => {
   const patch = "@@ -4,1 +8,2 @@\n-old\n\\ No newline at end of file\n+true\n+new\n\\ No newline at end of file";
-  const model = createDiffEngine(true, {
+  const model = createSyntaxDiffEngine({
     before: [[], [], [], [token("old")]],
     after: [[], [], [], [], [], [], [], [token("true", "true")], [token("new")]],
   })(patch);
@@ -49,7 +50,7 @@ test("block matching retains tokens across line splits and isolates trailing com
 });
 
 test("engine shares block-wide highlights across split and unified views", () => {
-  const result = createDiffEngine(true, {
+  const result = createSyntaxDiffEngine({
     before: [[token("oak", "arguments/identifier"), token(",", "arguments/,"), token("elm", "arguments/identifier")]],
     after: [[token("oak", "arguments/identifier"), token(",", "arguments/,")], [token("elm", "arguments/identifier"), token(",", "arguments/,")]],
   })("@@ -1 +1,2 @@\n-oak,elm\n+oak,\n+elm,");
@@ -104,9 +105,22 @@ test("inline matching prioritizes syntax over long indentation", () => {
 
 test("mismatched token text and budget overflow safely use legacy fallback", () => {
   const patch = "@@ -1 +1 @@\n-old\n+new";
-  expect(createDiffEngine(true, { before: [[token("wrong")]], after: [[token("wrong")]] })(patch)).toEqual(createDiffEngine(true)(patch));
+  expect(createSyntaxDiffEngine({ before: [[token("wrong")]], after: [[token("wrong")]] })(patch)).toEqual(createDiffEngine(true)(patch));
   let called = false;
   expect(createSyntaxMatcher().align(["x".repeat(4097)], ["x"], [[]], [[]], () => { called = true; return [{ before: 0, after: 0 }]; })).toEqual([{ before: 0, after: 0 }]);
   expect(called).toBe(true);
   expect(createSyntaxMatcher().highlight(Array.from({ length: 513 }, () => token("x")), [token("x")])).toBeUndefined();
+});
+
+test("reusing a syntax engine resets its candidate budget for each patch", () => {
+  const lines = 64;
+  const engine = createSyntaxDiffEngine({
+    before: Array.from({ length: lines }, () => [token("old")]),
+    after: Array.from({ length: lines }, () => [token("new")]),
+  });
+  const patch = `@@ -1,${lines} +1,${lines} @@\n` + "-old\n".repeat(lines) + "+new\n".repeat(lines);
+  const first = engine(patch);
+  const paired = first.split.filter(row => "left" in row && "right" in row);
+  expect(paired).toHaveLength(lines);
+  expect(engine(patch)).toEqual(first);
 });

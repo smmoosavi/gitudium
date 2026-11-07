@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
+import { appRouter } from "../src/server/router";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
 import { buildDiffModel } from "../src/client/diffModel";
 import { expandDiffContext } from "../src/client/diffContext";
@@ -60,6 +61,38 @@ test("Git algorithms match Git output and reject unknown values", async () => {
   }
   expect(await reader.diff("HEAD")).toEqual(await reader.diff("HEAD", undefined, undefined, "none", "myers"));
   await expect(reader.diff("HEAD", undefined, undefined, "none", "unknown" as GitDiffAlgorithm)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+test("committed and local diff option matrices preserve Git output through readers and API", async () => {
+  const directory = await fixture();
+  const before = "alpha beta\nkeep\nlast\n";
+  const after = "alpha  beta \t\nkeep\n \t\nlast changed\n";
+  await commit(directory, "file", before, "Before");
+  await commit(directory, "file", after, "After");
+  await writeFile(join(directory, "file"), before);
+  const reader = await GitRepositoryReader.discover(directory);
+  const api = appRouter.createCaller({ reader: async () => reader });
+  const whitespaceFlags = {
+    none: [], trailing: ["--ignore-space-at-eol"], all: ["--ignore-all-space"],
+    "all-and-blank-lines": ["--ignore-all-space", "--ignore-blank-lines"],
+  };
+  for (const algorithm of ["myers", "histogram", "patience", "minimal"] as const) {
+    for (const whitespace of ["none", "trailing", "all", "all-and-blank-lines"] as const) {
+      const flags = ["--full-index", "--no-renames", `--diff-algorithm=${algorithm}`, ...whitespaceFlags[whitespace]];
+      const expected = await git(directory, "diff", ...flags, "HEAD^", "HEAD", "--", "file");
+      const expectedLocal = await git(directory, "diff", ...flags, "HEAD", "--", "file");
+      for (const result of [await reader.diff("HEAD", "file", undefined, whitespace, algorithm),
+        await api.diff({ revision: "HEAD", path: "file", whitespace, algorithm })]) {
+        expect(result.state).toBe("text");
+        if (result.state === "text") expect(result.patch.trim()).toBe(expected);
+      }
+      for (const result of [await reader.localDiff("all", "file", undefined, whitespace, algorithm),
+        await api.localDiff({ scope: "all", path: "file", whitespace, algorithm })]) {
+        expect(result.state).toBe("text");
+        if (result.state === "text") expect(result.patch.trim()).toBe(expectedLocal);
+      }
+    }
+  }
 });
 
 test("renamed and copied files compare their original contents in patches and full-file context", async () => {
@@ -709,4 +742,33 @@ test("saved ref exclusions omit roots, retain shared ancestors, and yield to exp
   await expect(reader.history({ exclude: "--all" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await git(path, "checkout", "--detach", agent);
   expect((await reader.history({ exclude })).commits.map(item => item.id)).toContain(agent);
+});
+
+test("explicit selection shares full and shorthand matching with excluded decorations", async () => {
+  const path = await fixture();
+  const root = await commit(path, "root", "root", "root");
+  await git(path, "checkout", "-b", "docs/team/work");
+  const selected = await commit(path, "selected", "selected", "selected");
+  await git(path, "update-ref", "refs/remotes/origin/team/work", selected);
+  await git(path, "update-ref", "refs/agents/team/work", selected);
+  await git(path, "tag", "release/work", selected);
+  await git(path, "checkout", "main");
+  const reader = await GitRepositoryReader.discover(path);
+  const exclude = "docs/*, refs/remotes/*, refs/tags/*, refs/agents/*";
+  for (const [revision, decoration] of [
+    ["docs/team/work", "refs/heads/docs/team/work"], ["refs/heads/docs/*", "refs/heads/docs/team/work"],
+    ["docs/*", "refs/heads/docs/team/work"], ["origin/*", "refs/remotes/origin/team/work"],
+    ["refs/remotes/origin/*", "refs/remotes/origin/team/work"], ["release/*", "refs/tags/release/work"],
+    ["refs/agents/*", "refs/agents/team/work"],
+  ] as const) {
+    const page = await reader.history({ revision, exclude, limit: 1 });
+    expect(page.commits.map(item => item.id)).toEqual([selected]);
+    expect(page.commits[0]!.references).toEqual([decoration]);
+    await git(path, "update-ref", decoration, root);
+    const remainder = await reader.history({ cursor: page.nextCursor! });
+    expect(remainder.commits.map(item => item.id)).toEqual([root]);
+    expect(remainder.commits[0]!.references).not.toContain(decoration);
+    await git(path, "update-ref", decoration, selected);
+  }
+  expect((await reader.history({ exclude })).commits.map(item => item.id)).toEqual([root]);
 });

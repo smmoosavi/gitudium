@@ -5,6 +5,7 @@ import { dirname, join, relative, isAbsolute } from "node:path";
 import { RepositoryError, type ChangedFile, type DiffResult, type GitDiffAlgorithm, type LocalChangedFile, type LocalChanges, type LocalScope, type SourceFile, type SourceResult, type WhitespaceMode } from "./types";
 import { isLiteralPath } from "./validation";
 import { parseChangedFiles } from "./parsers";
+import { gitDiffFlags } from "./diffOptions";
 
 const MAX_LOCAL_FILE = 1024 * 1024;
 type RunGit = (args: string[], signal?: AbortSignal, limit?: number, input?: string) => Promise<string>;
@@ -143,9 +144,7 @@ export class LocalChangesReader {
   }
 
   async diff(scope: LocalScope, path: string, signal?: AbortSignal, whitespace: WhitespaceMode = "none", algorithm: GitDiffAlgorithm = "myers"): Promise<DiffResult> {
-    if (!["myers", "histogram", "patience", "minimal"].includes(algorithm) || !["none", "trailing", "all", "all-and-blank-lines"].includes(whitespace)) {
-      throw new RepositoryError("INVALID_INPUT", "Unknown diff option.");
-    }
+    const flags = gitDiffFlags(whitespace, algorithm);
     const file = await this.file(scope, path, signal);
     if (file.conflicted && scope !== "all") return { state: "text", patch: "" };
     if (scope === "untracked" || (scope === "all" && file.untracked && !file.staged)) {
@@ -158,11 +157,10 @@ export class LocalChangesReader {
       const patch = `--- /dev/null\n+++ b/${path}\n` + (lines.length ? `@@ -0,0 +1,${lines.length} @@\n${lines.map(line => `+${line}\n`).join("")}${text.endsWith("\n") ? "" : "\\ No newline at end of file\n"}` : "");
       return Buffer.byteLength(patch) > MAX_LOCAL_FILE ? { state: "oversized", limitBytes: MAX_LOCAL_FILE } : { state: "text", patch };
     }
-    const flags = whitespace === "trailing" ? ["--ignore-space-at-eol"] : whitespace === "all" ? ["--ignore-all-space"] : whitespace === "all-and-blank-lines" ? ["--ignore-all-space", "--ignore-blank-lines"] : [];
     const base = scope === "unstaged" ? null : await this.base(signal);
     const comparison = scope === "staged" ? ["--cached", base!] : scope === "unstaged" ? [] : [file.untracked && file.staged ? `${base}:${path}` : base!];
     try {
-      const patch = await this.run(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", `--diff-algorithm=${algorithm}`, ...flags, ...comparison, "--", path], signal, MAX_LOCAL_FILE);
+      const patch = await this.run(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", ...flags, ...comparison, "--", path], signal, MAX_LOCAL_FILE);
       return /^Binary files .* differ$/m.test(patch) ? { state: "binary" } : { state: "text", patch };
     } catch (error) {
       if (error instanceof RepositoryError && error.code === "OUTPUT_LIMIT") return { state: "oversized", limitBytes: MAX_LOCAL_FILE };

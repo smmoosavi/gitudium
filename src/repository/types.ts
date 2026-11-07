@@ -91,9 +91,11 @@ export interface CommitDetails extends CommitSummary {
   diffBase: string | null;
 }
 
-export type GitDiffAlgorithm = "myers" | "histogram" | "patience" | "minimal";
+export const gitDiffAlgorithms = ["myers", "histogram", "patience", "minimal"] as const;
+export type GitDiffAlgorithm = typeof gitDiffAlgorithms[number];
 
-export type WhitespaceMode = "none" | "trailing" | "all" | "all-and-blank-lines";
+export const whitespaceModes = ["none", "trailing", "all", "all-and-blank-lines"] as const;
+export type WhitespaceMode = typeof whitespaceModes[number];
 
 export type DiffResult =
   | { state: "text"; patch: string }

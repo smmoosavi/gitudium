@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createDiffEngine } from "./diffEngine";
+import { createSyntaxDiffEngine } from "./syntaxDiffEngine";
 import type { MatchResult } from "./syntaxMatcher";
 import { syntaxSourcesWithinLimit, type SyntaxSources } from "./syntaxTypes";
 
@@ -22,7 +22,7 @@ export function useSyntaxMatcher(enabled: boolean, sources: SyntaxSources | unde
     return () => { active = false; clearTimeout(timeout); worker.terminate(); };
   }, [enabled, sources]);
   const result = enabled && state?.sources === sources ? state?.result : undefined;
-  const engine = useMemo(() => result ? createDiffEngine(true, result) : undefined, [result]);
+  const engine = useMemo(() => result ? createSyntaxDiffEngine(result) : undefined, [result]);
   const eligible = !!sources && syntaxSourcesWithinLimit(sources);
   return { engine, pending: enabled && eligible && state?.sources !== sources, unavailable: enabled && (!eligible || (state?.sources === sources && !result)) };
 }

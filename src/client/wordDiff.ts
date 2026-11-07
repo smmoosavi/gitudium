@@ -66,9 +66,26 @@ export type ChangeBlock = {
   highlights: Map<number, DiffSegment[]>;
 };
 
-export function patchChangeBlocks(patch: string, align?: LineAligner, syntax?: { align: (removed: number[], added: number[], before: string[], after: string[]) => LinePair[]; highlight: (oldIndex: number, newIndex: number) => InlineChange | undefined; highlightBlock?: (removed: number[], added: number[]) => Map<number, DiffSegment[]> | undefined }): ChangeBlock[] {
-  const blocks: ChangeBlock[] = [];
+/** One per patch: algorithms own their budgets and fallback composition. */
+export interface ChangeBlockPolicy {
+  align(removed: number[], added: number[], before: string[], after: string[]): LinePair[];
+  highlight(oldIndex: number, newIndex: number, before: string, after: string): InlineChange | undefined;
+  highlightBlock?(removed: number[], added: number[]): Map<number, DiffSegment[]> | undefined;
+}
+
+export function createTextChangePolicy(align?: LineAligner): ChangeBlockPolicy {
   const highlight = createWordHighlighter();
+  return {
+    align: (_removed, _added, before, after) => align ? align(before, after)
+      : Array.from({ length: Math.max(before.length, after.length) }, (_, index) => ({
+        before: index < before.length ? index : undefined, after: index < after.length ? index : undefined,
+      })),
+    highlight: (_oldIndex, _newIndex, before, after) => highlight(before, after),
+  };
+}
+
+export function patchChangeBlocks(patch: string, policy: ChangeBlockPolicy): ChangeBlock[] {
+  const blocks: ChangeBlock[] = [];
   const lines = patch.split("\n");
   let removed: number[] = [];
   let added: number[] = [];
@@ -76,21 +93,21 @@ export function patchChangeBlocks(patch: string, align?: LineAligner, syntax?: {
   const flush = () => {
     if (!removed.length && !added.length) return;
     const highlights = new Map<number, DiffSegment[]>();
-    const pairs = syntax ? syntax.align(removed, added, removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : align ? align(removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1))) : Array.from({ length: Math.max(removed.length, added.length) }, (_, index) => ({ before: index < removed.length ? index : undefined, after: index < added.length ? index : undefined }));
-    const syntaxHighlights = syntax?.highlightBlock?.(removed, added);
-    if (!syntaxHighlights && Math.max(removed.length, added.length) <= maxBlockLines) {
+    const pairs = policy.align(removed, added, removed.map(index => lines[index]!.slice(1)), added.map(index => lines[index]!.slice(1)));
+    const blockHighlights = policy.highlightBlock?.(removed, added);
+    if (!blockHighlights && Math.max(removed.length, added.length) <= maxBlockLines) {
       for (const pair of pairs) {
         if (pair.before === undefined || pair.after === undefined) continue;
         const oldIndex = removed[pair.before]!;
         const newIndex = added[pair.after]!;
-        const change = syntax?.highlight(oldIndex, newIndex) ?? highlight(lines[oldIndex]!.slice(1), lines[newIndex]!.slice(1));
+        const change = policy.highlight(oldIndex, newIndex, lines[oldIndex]!.slice(1), lines[newIndex]!.slice(1));
         if (change) {
           highlights.set(oldIndex, change.before);
           highlights.set(newIndex, change.after);
         }
       }
     }
-    if (syntaxHighlights) for (const [index, segments] of syntaxHighlights) highlights.set(index, segments);
+    if (blockHighlights) for (const [index, segments] of blockHighlights) highlights.set(index, segments);
     blocks.push({ removed, added, pairs, highlights });
     removed = []; added = [];
   };
@@ -114,5 +131,5 @@ export function patchChangeBlocks(patch: string, align?: LineAligner, syntax?: {
 }
 
 export function patchHighlights(patch: string, align?: LineAligner): Map<number, DiffSegment[]> {
-  return new Map(patchChangeBlocks(patch, align).flatMap(block => [...block.highlights]));
+  return new Map(patchChangeBlocks(patch, createTextChangePolicy(align)).flatMap(block => [...block.highlights]));
 }
