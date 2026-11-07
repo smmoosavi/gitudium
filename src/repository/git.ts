@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { RepositoryError } from "./types";
 import { HISTORY_CHUNK_SIZE } from "./limits";
 import { LocalChangesReader } from "./local";
+import { gitDiffFlags } from "./diffOptions";
 import type { LocalScope } from "./types";
 import type {
   ChangedFile, CommitDetails, DiffResult, HistoryPage,
@@ -301,17 +302,14 @@ export class GitRepositoryReader implements RepositoryReader {
 
   async diff(revision: string, path?: string, signal?: AbortSignal, whitespace: WhitespaceMode = "none", algorithm: GitDiffAlgorithm = "myers"): Promise<DiffResult> {
     if (path !== undefined) validatePath(path);
-    if (!["myers", "histogram", "patience", "minimal"].includes(algorithm)) invalid("Unknown Git diff algorithm.");
+    const flags = gitDiffFlags(whitespace, algorithm);
     const id = await this.resolve(revision, signal);
     const comparison = await this.comparison(id, signal);
-    const whitespaceFlags = whitespace === "trailing" ? ["--ignore-space-at-eol"]
-      : whitespace === "all" ? ["--ignore-all-space"]
-      : whitespace === "all-and-blank-lines" ? ["--ignore-all-space", "--ignore-blank-lines"] : [];
     const file = path === undefined ? undefined : (await this.files(id, signal)).find(file => file.path === path);
     // A destination-only pathspec hides the rename/copy source from Git's tree diff.
     const args = file?.previousPath && comparison.length === 2
-      ? ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--full-index", `--diff-algorithm=${algorithm}`, ...whitespaceFlags, `${comparison[0]}:${file.previousPath}`, `${id}:${file.path}`, "--"]
-      : ["diff-tree", "--no-commit-id", "-r", "-p", "--root", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", `--diff-algorithm=${algorithm}`, ...whitespaceFlags, ...comparison, "--", ...(path === undefined ? [] : [path])];
+      ? ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--full-index", ...flags, `${comparison[0]}:${file.previousPath}`, `${id}:${file.path}`, "--"]
+      : ["diff-tree", "--no-commit-id", "-r", "-p", "--root", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--full-index", ...flags, ...comparison, "--", ...(path === undefined ? [] : [path])];
     try {
       const patch = await this.run(args, signal, MAX_DIFF);
       return /^Binary files .* differ$/m.test(patch) ? { state: "binary" } : { state: "text", patch };

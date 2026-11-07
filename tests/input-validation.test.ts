@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { GitRepositoryReader } from "../src/repository/git";
-import { RepositoryError, type RepositoryReader, type WhitespaceMode } from "../src/repository/types";
+import { RepositoryError, type RepositoryReader, type GitDiffAlgorithm, type WhitespaceMode } from "../src/repository/types";
 import { appRouter } from "../src/server/router";
 
 const revisions = [
@@ -126,5 +126,22 @@ test("ref exclusion validation is shared by API and reader", async () => {
       ? { code: "GIT_FAILED" } : { code: "INVALID_INPUT" });
     await expect(api.history({ exclude: exclude as string })).rejects.toMatchObject(valid
       ? { message: "accepted input" } : { code: "BAD_REQUEST" });
+  }
+});
+
+test("both direct diff readers reject invalid options before comparison IO; API rejects them too", async () => {
+  const { reader } = await readers();
+  const api = appRouter.createCaller({ reader: async () => reader });
+  for (const value of ["", "unknown", "ALL", "--ignore-all-space", null, 123, true, [], {}]) {
+    const whitespace = value as WhitespaceMode;
+    const algorithm = value as GitDiffAlgorithm;
+    await expect(reader.diff("HEAD", "file", undefined, whitespace)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(reader.localDiff("all", "file", undefined, whitespace)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(reader.diff("HEAD", "file", undefined, "none", algorithm)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(reader.localDiff("all", "file", undefined, "none", algorithm)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(api.diff({ revision: "HEAD", whitespace })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(api.localDiff({ scope: "all", path: "file", whitespace })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(api.diff({ revision: "HEAD", algorithm })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(api.localDiff({ scope: "all", path: "file", algorithm })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   }
 });

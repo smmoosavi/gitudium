@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GitRepositoryReader } from "../src/repository/git";
+import { appRouter } from "../src/server/router";
 import { HISTORY_CHUNK_SIZE } from "../src/repository/limits";
 import { buildDiffModel } from "../src/client/diffModel";
 import { expandDiffContext } from "../src/client/diffContext";
@@ -60,6 +61,38 @@ test("Git algorithms match Git output and reject unknown values", async () => {
   }
   expect(await reader.diff("HEAD")).toEqual(await reader.diff("HEAD", undefined, undefined, "none", "myers"));
   await expect(reader.diff("HEAD", undefined, undefined, "none", "unknown" as GitDiffAlgorithm)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+test("committed and local diff option matrices preserve Git output through readers and API", async () => {
+  const directory = await fixture();
+  const before = "alpha beta\nkeep\nlast\n";
+  const after = "alpha  beta \t\nkeep\n \t\nlast changed\n";
+  await commit(directory, "file", before, "Before");
+  await commit(directory, "file", after, "After");
+  await writeFile(join(directory, "file"), before);
+  const reader = await GitRepositoryReader.discover(directory);
+  const api = appRouter.createCaller({ reader: async () => reader });
+  const whitespaceFlags = {
+    none: [], trailing: ["--ignore-space-at-eol"], all: ["--ignore-all-space"],
+    "all-and-blank-lines": ["--ignore-all-space", "--ignore-blank-lines"],
+  };
+  for (const algorithm of ["myers", "histogram", "patience", "minimal"] as const) {
+    for (const whitespace of ["none", "trailing", "all", "all-and-blank-lines"] as const) {
+      const flags = ["--full-index", "--no-renames", `--diff-algorithm=${algorithm}`, ...whitespaceFlags[whitespace]];
+      const expected = await git(directory, "diff", ...flags, "HEAD^", "HEAD", "--", "file");
+      const expectedLocal = await git(directory, "diff", ...flags, "HEAD", "--", "file");
+      for (const result of [await reader.diff("HEAD", "file", undefined, whitespace, algorithm),
+        await api.diff({ revision: "HEAD", path: "file", whitespace, algorithm })]) {
+        expect(result.state).toBe("text");
+        if (result.state === "text") expect(result.patch.trim()).toBe(expected);
+      }
+      for (const result of [await reader.localDiff("all", "file", undefined, whitespace, algorithm),
+        await api.localDiff({ scope: "all", path: "file", whitespace, algorithm })]) {
+        expect(result.state).toBe("text");
+        if (result.state === "text") expect(result.patch.trim()).toBe(expectedLocal);
+      }
+    }
+  }
 });
 
 test("renamed and copied files compare their original contents in patches and full-file context", async () => {

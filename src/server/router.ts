@@ -1,6 +1,6 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { RepositoryError } from "../repository/types";
+import { gitDiffAlgorithms, whitespaceModes, RepositoryError } from "../repository/types";
 import { HISTORY_CHUNK_SIZE } from "../repository/limits";
 import { isRevision, isHistoryExpression, isRefExclusions, isLiteralPath } from "../repository/validation";
 import type { RepositoryReader } from "../repository/types";
@@ -35,8 +35,8 @@ export const appRouter = t.router({
   localChanges: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.localChanges(signal))),
   localDiff: repositoryProcedure.input(z.object({
     scope: localScope, path,
-    algorithm: z.enum(["myers", "histogram", "patience", "minimal"]).default("myers"),
-    whitespace: z.enum(["none", "trailing", "all", "all-and-blank-lines"]).default("none"),
+    algorithm: z.enum(gitDiffAlgorithms).default("myers"),
+    whitespace: z.enum(whitespaceModes).default("none"),
   })).query(({ ctx, input, signal }) => read(() => ctx.reader.localDiff(input.scope, input.path, signal, input.whitespace, input.algorithm))),
   localSources: repositoryProcedure.input(z.object({ scope: localScope, path })).query(({ ctx, input, signal }) => read(() => ctx.reader.localSources(input.scope, input.path, signal))),
   metadata: repositoryProcedure.query(({ ctx, signal }) => read(() => ctx.reader.metadata(signal))),
@@ -52,8 +52,8 @@ export const appRouter = t.router({
   diff: repositoryProcedure.input(z.object({
     revision,
     path: path.optional(),
-    algorithm: z.enum(["myers", "histogram", "patience", "minimal"]).default("myers"),
-    whitespace: z.enum(["none", "trailing", "all", "all-and-blank-lines"]).default("none"),
+    algorithm: z.enum(gitDiffAlgorithms).default("myers"),
+    whitespace: z.enum(whitespaceModes).default("none"),
   })).query(({ ctx, input, signal }) => read(() => ctx.reader.diff(input.revision, input.path, signal, input.whitespace, input.algorithm))),
   sources: repositoryProcedure.input(z.object({ revision, path })).query(({ ctx, input, signal }) => read(() => ctx.reader.sources(input.revision, input.path, signal))),
   health: t.procedure

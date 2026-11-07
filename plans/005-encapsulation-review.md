@@ -1,6 +1,6 @@
 # Encapsulation and single-responsibility review
 
-Status: Proposed; no refactors implemented.
+Status: Implementation in progress on `refactor/encapsulation-maintenance`.
 
 Review baseline: clean `main`, HEAD `d143409ecfddf48da17ff7fe0b9e0214fced7dee`.
 Implementations, callers, and relevant unit/browser tests were inspected. Tests were not executed during the read-only review. Source line references below describe this baseline.
@@ -101,3 +101,19 @@ A shared key factory/parser is sufficient if query work proceeds. This is too sm
 4. **Reassess detail-query extraction.** Optional. Combine with shared query-key ownership only if it materially simplifies lifecycle changes. Preserve keyed component resets, app-owned syntax-service lifetime, and DOM focus behavior.
 
 Each step should be independently reviewable. Use pnpm for appropriate targeted checks during future implementation. Expand verification only where changed behavior or failures justify it; browser/build checks can create artifacts and were not run as part of this review.
+
+## Implementation plan and decisions
+
+1. Consolidate diff options, then validate and review before committing.
+2. Extract history selection policy without changing roots, decorations, or snapshots.
+3. Isolate syntax-engine composition if the existing contract permits a small extraction.
+4. Reassess query lifecycle/key ownership; defer unless it reduces dependencies.
+
+### Diff options
+
+- Completed: canonical algorithm/whitespace values derive the public types and API schemas; both readers use a pure validator/flag builder before comparison IO.
+- Intentional behavior change: committed direct-reader calls now reject unknown whitespace values with `INVALID_INPUT`, matching local calls. Invalid algorithms remain rejected. Valid inputs and defaults are unchanged; invalid-option error messages are now specific in both readers.
+- Kept comparison commands, rename handling, local scopes, untracked patch construction, and runner limits in their existing owners. Deferred shared patch-result/error classification: the two short branches do not justify another execution abstraction.
+- Regression coverage: all 16 algorithm/whitespace combinations compared with Git through committed/local readers and API; invalid runtime values rejected by both readers and endpoints. Existing root/rename, local conflict/scope, binary/oversized, and newline tests retained.
+- Validation: `pnpm test --timeout 30000 tests/repository.test.ts tests/local-changes.test.ts tests/input-validation.test.ts` passed (39 tests); `pnpm typecheck` and `git diff --check` passed. The initial default-timeout run hit the existing snapshot-cache test's 5-second limit; the 30-second rerun passed.
+- Sol findings ledger: round 1, GPT 6.1 Sol (`gpt-6.1-sol`, high effort), APPROVE; no findings, fixes, or declined items. Reviewer independently reran the 39 tests, typecheck, and diff check successfully. Implementation diff before/after review: 8 files, +95/−20 (documentation outcome update excluded); usage not exposed. No push.
