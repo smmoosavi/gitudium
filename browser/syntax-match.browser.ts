@@ -127,13 +127,13 @@ test("syntax matching preserves reflow, wrappers and significant edits across re
         });
         if (!data.result) throw new Error("Parsing failed: " + example.path);
         // @ts-expect-error Vite serves this module during the browser test.
-        const { createDiffEngine }: typeof import("../src/client/diffEngine") = await import("/src/client/diffEngine.ts");
+        const { createSyntaxDiffEngine }: typeof import("../src/client/syntaxDiffEngine") = await import("/src/client/syntaxDiffEngine.ts");
         const before = example.before.trimEnd().split("\n");
         const after = example.after.trimEnd().split("\n");
         const patch = example.path === "removed-object.json"
           ? ['@@ -1,11 +1,5 @@', ' {', '   "peerDependencies": {', '-    "react": "^18"', '-  },', '-  "pnpm": {', '-    "overrides": {', '-      "parser": "^6",', '-      "plugin": "^6"', '-    }', '+    "react": "^18 || ^19"', '   }', ' }'].join("\n")
           : [`@@ -1,${before.length} +1,${after.length} @@`, ...before.map(line => "-" + line), ...after.map(line => "+" + line)].join("\n");
-        const model = createDiffEngine(true, data.result)(patch);
+        const model = createSyntaxDiffEngine(data.result)(patch);
         const added = model.unified.filter(line => line.prefix === "+");
         const atomicStrings = model.unified.every(line => {
           const tokens = line.prefix === "+" ? data.result!.after?.[line.newNumber! - 1] : line.prefix === "-" ? data.result!.before?.[line.oldNumber! - 1] : undefined;

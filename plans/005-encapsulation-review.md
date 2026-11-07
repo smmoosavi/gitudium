@@ -1,6 +1,6 @@
 # Encapsulation and single-responsibility review
 
-Status: Implementation in progress on `refactor/encapsulation-maintenance`.
+Status: Selected refactors completed on `refactor/encapsulation-maintenance`; all three commit-sized changes approved by Sol. Deferred items and validation results are recorded below.
 
 Review baseline: clean `main`, HEAD `d143409ecfddf48da17ff7fe0b9e0214fced7dee`.
 Implementations, callers, and relevant unit/browser tests were inspected. Tests were not executed during the read-only review. Source line references below describe this baseline.
@@ -104,10 +104,10 @@ Each step should be independently reviewable. Use pnpm for appropriate targeted 
 
 ## Implementation plan and decisions
 
-1. Consolidate diff options, then validate and review before committing.
-2. Extract history selection policy without changing roots, decorations, or snapshots.
-3. Isolate syntax-engine composition if the existing contract permits a small extraction.
-4. Reassess query lifecycle/key ownership; defer unless it reduces dependencies.
+1. Completed and committed: consolidate diff options, with regression checks and Sol approval.
+2. Completed and committed: extract history selection policy, preserving roots, decorations, and snapshots.
+3. Completed: isolate syntax-engine composition behind the existing contract, with regression checks and Sol approval.
+4. Investigated and deferred: query lifecycle/key ownership (rationale below).
 
 ### Diff options
 
@@ -125,3 +125,20 @@ Each step should be independently reviewable. Use pnpm for appropriate targeted 
 - Added regression coverage for exact/full/shorthand/custom references and nested globs overriding saved exclusions, plus frozen decorations across moved refs. Existing negative-only, non-commit/nested-tag, exclusion, snapshot, and ordering cases remain in the covering suite.
 - Validation: `pnpm test --timeout 30000 tests/repository.test.ts tests/input-validation.test.ts tests/history-order-contract.test.ts tests/history-order.test.ts tests/recent-history-order.test.ts` passed (52 tests); `pnpm typecheck` and `git diff --check` passed.
 - Sol findings ledger: round 1, GPT 6.1 Sol (`gpt-6.1-sol`, high effort), APPROVE; no findings, fixes, or declined items. Reviewer independently reran the 52 tests, typecheck, and staged/base diff checks successfully. Implementation diff before/after review: 4 files, +83/−28 (documentation outcome update excluded); usage not exposed. No push.
+
+### Syntax-engine composition
+
+- Completed implementation: syntax-specific scope repair, source-token mapping, and fallback composition moved into `syntaxDiffEngine.ts`. The hook selects that engine; common `diffEngine.ts` builds the shared split/unified model without importing syntax matching.
+- Block scanning accepts one `ChangeBlockPolicy` contract. Positional/similarity policies own textual highlighting; syntax composition supplies syntax matching with explicit textual fallbacks. Algorithms and their independent budgets are constructed per patch, including when reusing an engine.
+- No matching algorithm, tokenizer protocol, or UI behavior change intended. Existing serialized simple/paired output fixtures, JSON scope repair, stale-token fallback, source coordinates, newline markers, and shared segment references remain regression checks. New cases verify a policy can suppress highlights, missing tokens preserve legacy syntax output across all fixtures, and reused engines reset syntax/text fallback budgets.
+- Worker IO, scheduling, timeout, and lifecycle remain outside the engine; syntax coloring/context expansion and rendering retain their existing boundaries.
+- Deferred tokenizer-role normalization: after this extraction, common scanning/model assembly consumes no tokenizer roles. Slash-separated types and JSON roles remain private to the syntax worker/matcher implementation. A second normalized token protocol would add representation and migration cost without another consumer; reconsider with a concrete tokenizer replacement.
+- Validation: `pnpm test --timeout 30000` passed all 294 tests; `pnpm typecheck`, `pnpm build`, `pnpm test:artifact`, and `git diff --check` passed. Browser syntax matching/lifecycle suites passed all 7 cases using `/usr/bin/chromium` via `/tmp/gitudium-playwright-config.ts` (temporary config only; repository Playwright config unchanged).
+- Validation follow-up: the default Playwright binary was absent and its download returned HTTP 403. The first system-Chromium run had one unexpected navigation during concurrent repository/smoke checks (6 passed); an isolated rerun passed all 7. An initial new unit assertion incorrectly assumed tokenless syntax output always equals paired output; comparison against committed `44f5197` confirmed existing alternating-line regrouping. Captured baseline syntax hashes (third fixture column: simple, paired, tokenless syntax) and preserved that behavior; the full rerun passed.
+- Sol findings ledger: round 1, GPT 6.1 Sol (`gpt-6.1-sol`, high effort), APPROVE; no findings, fixes, or declined items. Reviewer independently passed 40 diff-engine/syntax-matcher/line-alignment tests, typecheck, and base diff check; browser/build checks were not rerun by the reviewer. Implementation diff before/after review: 9 files, +229/−125 (documentation outcome update excluded); usage not exposed. No push.
+
+### Detail queries and other deferrals
+
+- Investigated `CommitView.tsx` and `diffQuery.ts`: file/scope selection determines query enablement, source debounce is also advanced by context controls, and keyed context state feeds rendering. A query hook would still need these inputs and return most of the existing state; no current lifecycle change justifies that extraction. Keep the component's coordination and app-owned syntax-service lifetime.
+- Deferred shared query-key factory/parser with that query work: there is one key producer and a small placeholder predicate; current tests already enforce same-file/comparison retention. No key format changes are needed here.
+- Kept all sound boundaries listed above. No plugin framework, new extensibility layer, history algorithm changes, or unrelated fixes.
